@@ -748,10 +748,14 @@ body{
     <div class="login-logo">🎁</div>
     <div class="login-title">퓨처테리어 경품 관리</div>
     <div class="login-subtitle">접속 유형을 선택하고 비밀번호를 입력해 주세요</div>
-    <div class="login-tabs">
-      <button class="login-tab-btn active" id="loginTabGuest" onclick="selectLoginTab('guest')">👤 게스트</button>
-      <button class="login-tab-btn" id="loginTabAdmin" onclick="selectLoginTab('admin')">🔑 관리자</button>
-    </div>
+    <select id="loginTypeSelect" onchange="loginType=this.value" style="
+      width:100%;background:var(--surface2);border:1px solid var(--border);
+      border-radius:10px;padding:12px 14px;color:var(--text);font-size:14px;
+      font-family:'Noto Sans KR',sans-serif;outline:none;margin-bottom:12px;
+      cursor:pointer;appearance:auto;">
+      <option value="guest" style="background:#1a1a22">👤 게스트</option>
+      <option value="admin" style="background:#1a1a22">🔑 관리자</option>
+    </select>
     <input class="login-input" type="password" id="loginPwInput" placeholder="비밀번호 입력" onkeydown="if(event.key==='Enter')doLogin()">
     <button class="login-btn" onclick="doLogin()">접속</button>
     <div class="login-error" id="loginError"></div>
@@ -2497,8 +2501,8 @@ let loginType = 'guest';
 
 function selectLoginTab(type) {
   loginType = type;
-  document.getElementById('loginTabGuest').classList.toggle('active', type==='guest');
-  document.getElementById('loginTabAdmin').classList.toggle('active', type==='admin');
+  const sel = document.getElementById('loginTypeSelect');
+  if (sel) sel.value = type;
   document.getElementById('loginPwInput').value = '';
   document.getElementById('loginError').textContent = '';
 }
