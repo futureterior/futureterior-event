@@ -917,6 +917,183 @@ body{
   .stock-btn.edit{ border-color:var(--border); color:var(--muted); }
   .stock-btn.del{ border-color:var(--border); color:var(--muted); }
 }
+
+/* ── MOBILE POLISH FINAL ── */
+@media(max-width:640px){
+  body{font-size:13px;padding-bottom:calc(72px + var(--safe-bottom));}
+  .top-bar{padding:10px 12px;}
+  .top-bar-inner{gap:8px;}
+  .app-title{font-size:13px;min-width:170px;}
+  .role-badge{font-size:10px;padding:3px 8px;}
+  .page-tab-row{overflow-x:auto;scrollbar-width:none;padding:0 12px;margin-top:6px;}
+  .page-tab-row::-webkit-scrollbar{display:none;}
+  .page-tab{padding:8px 12px;font-size:12px;flex-shrink:0;}
+
+  .date-bar{padding:8px 12px;}
+  .date-chip,.add-date-btn{padding:6px 12px;font-size:11px;}
+
+  /* 핵심 통계 우선: 미포장/포장/발송/합배송 + 오늘 처리량 */
+  .stats-row{
+    display:grid;
+    grid-template-columns:repeat(4,minmax(0,1fr));
+    gap:6px;
+    padding:10px 12px 8px;
+  }
+  .stats-row .stat{padding:8px 4px;border-radius:9px;min-width:0;}
+  .stats-row .stat:nth-child(1){display:none;} /* 총 당첨자는 모바일에서 숨김 */
+  .stats-row .stat:nth-child(4){order:1;} /* 미포장 */
+  .stats-row .stat:nth-child(2){order:2;} /* 포장 */
+  .stats-row .stat:nth-child(3){order:3;} /* 발송 */
+  .stats-row .stat:nth-child(5){order:4;} /* 합배송 */
+  .stats-row .stat:nth-child(6){order:5;grid-column:1 / span 2;}
+  .stats-row .stat:nth-child(7){order:6;grid-column:3 / span 2;}
+  .stat-num{font-size:16px;line-height:1.1;}
+  .stat-label{font-size:9px;margin-top:3px;white-space:nowrap;}
+  .stats-row .stat:nth-child(6),
+  .stats-row .stat:nth-child(7){
+    display:flex;align-items:center;justify-content:center;gap:8px;
+    padding:7px 8px;background:rgba(255,255,255,0.025);
+  }
+  .stats-row .stat:nth-child(6) .stat-num,
+  .stats-row .stat:nth-child(7) .stat-num{font-size:13px;}
+  .stats-row .stat:nth-child(6) .stat-label,
+  .stats-row .stat:nth-child(7) .stat-label{font-size:10px;margin-top:0;}
+
+  .privacy-notice{
+    margin:0 12px 10px;padding:8px 10px;border-radius:10px;
+    font-size:10px;line-height:1.45;gap:6px;
+  }
+  .privacy-pill{font-size:9px;padding:2px 7px;}
+
+  .ops-toolbar{
+    padding:0 12px 10px;gap:6px;
+    overflow-x:auto;flex-wrap:nowrap;scrollbar-width:none;
+  }
+  .ops-toolbar::-webkit-scrollbar{display:none;}
+  .ops-btn{min-height:36px;padding:0 12px;font-size:11px;flex-shrink:0;border-radius:9px;}
+
+  .tab-nav-inner{padding:0 8px;}
+  .tab-btn{padding:10px 10px;font-size:12px;}
+  .tab-badge{font-size:9px;padding:1px 6px;}
+
+  .tab-content{padding:12px 12px 20px;}
+  .search-input{height:42px;border-radius:11px;font-size:13px;padding:10px 12px;}
+  .filter-row{gap:5px;margin-bottom:12px;overflow-x:auto;flex-wrap:nowrap;scrollbar-width:none;}
+  .filter-row::-webkit-scrollbar{display:none;}
+  .filter-btn,.filter-packed-toggle{flex-shrink:0;min-height:32px;}
+
+  .section{margin-bottom:22px;}
+  .section-header{gap:6px;margin-bottom:8px;padding-bottom:7px;}
+  .section-title{font-size:12px;}
+  .section-count,.section-badge{font-size:9px;padding:2px 7px;}
+
+  .winners-grid,.combined-grid{gap:10px;}
+  .winner-card{border-radius:14px;}
+  .card-body{padding:12px 13px 10px;}
+  .card-name-row{align-items:center;margin-bottom:5px;}
+  .winner-name{font-size:14px;letter-spacing:-0.01em;}
+  .card-tag{font-size:9px;padding:2px 7px;}
+  .winner-phone{font-size:12px;margin-bottom:7px;}
+  .winner-address{font-size:12px;line-height:1.45;}
+
+  /* 상태 배지는 짧고 선명하게 */
+  .addr-verified-line,
+  .addr-unverified-line,
+  .sent-verified-line{
+    margin-top:8px;font-size:10px;padding:3px 8px;line-height:1.2;
+    max-width:100%;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
+  }
+  .sent-verified-line{color:#5eb8f0;}
+  .addr-unverified-line{color:var(--warn);}
+
+  /* 카드 하단 액션: 모바일에서는 라인 맞춤 + 큰 터치 영역 */
+  .card-footer{
+    display:flex !important;
+    flex-direction:column;
+    align-items:stretch;
+    border-top:1px solid var(--border);
+  }
+  .card-check-group{
+    width:100%;
+    border-right:none;
+    border-bottom:1px solid var(--border);
+  }
+  .card-check-row{
+    min-height:46px;
+    padding:0 13px;
+    gap:8px;
+  }
+  .pack-label{min-height:46px;}
+  .pack-box{width:18px;height:18px;border-radius:5px;}
+  .pack-text{font-size:12px;}
+  .pack-time{font-size:10px;}
+
+  .copy-btn-group{
+    display:grid !important;
+    grid-template-columns:1fr 1fr;
+    grid-template-rows:none;
+    border-left:none;
+    min-width:0;
+    width:100%;
+  }
+  .copy-btn-group .copy-btn{
+    min-height:44px;
+    border-bottom:none;
+    border-right:1px solid var(--border);
+    padding:0 10px;
+    font-size:12px;
+    color:var(--muted);
+  }
+  .copy-btn-group .copy-btn:last-child{border-right:none;}
+  .copy-btn-group .copy-btn:active{
+    background:rgba(124,106,247,0.12);
+    color:var(--accent);
+  }
+
+  .verify-action-row{
+    padding:9px 10px;
+    justify-content:center;
+    background:rgba(247,192,106,0.04);
+  }
+  .verify-action-row .copy-btn.verify-btn{
+    width:100%;
+    min-height:42px;
+    justify-content:center;
+    border-radius:11px;
+    font-size:12px;
+  }
+
+  .combined-card{border-radius:14px;}
+  .combined-header{padding:11px 12px;}
+  .combined-name{font-size:14px;}
+  .combined-addr{font-size:12px;padding:8px 12px;}
+  .combined-items{padding:8px 12px;}
+  .combined-item{gap:6px;align-items:flex-start;}
+  .item-checks{flex-direction:column;gap:5px;}
+  .item-check-btn{min-height:30px;justify-content:center;border-radius:8px;}
+
+  .modal,.upload-modal,.pw-modal,.log-modal,.addr-detail-card{
+    border-radius:18px 18px 0 0;
+    max-width:100%;
+  }
+  .modal-title{font-size:15px;}
+  .modal-input{min-height:44px;font-size:14px;}
+  .modal-btn{min-height:44px;}
+}
+
+@media(max-width:390px){
+  .stats-row{grid-template-columns:repeat(2,minmax(0,1fr));}
+  .stats-row .stat:nth-child(4),
+  .stats-row .stat:nth-child(2),
+  .stats-row .stat:nth-child(3),
+  .stats-row .stat:nth-child(5),
+  .stats-row .stat:nth-child(6),
+  .stats-row .stat:nth-child(7){grid-column:auto;}
+  .winner-name{font-size:13px;}
+  .winner-address{font-size:11px;}
+  .copy-btn-group .copy-btn{font-size:11px;}
+}
+
 </style>
 </head>
 <body>
@@ -2103,8 +2280,8 @@ function buildCard(w, cat, opts={}) {
         </div>
       </div>
       <div class="copy-btn-group">
-        <button class="copy-btn" onclick="copySingle('${esc(w.name)}','${esc(w.phone)}','${esc(w.addr)}',this)">주소</button>
-        <button class="copy-btn" onclick="copyShipping('${esc(w.name)}','${esc(w.phone)}','${esc(w.addr)}','${esc(cat)}',this)">택배</button>
+        <button class="copy-btn" onclick="copySingle('${esc(w.name)}','${esc(w.phone)}','${esc(w.addr)}',this)">주소 복사</button>
+        <button class="copy-btn" onclick="copyShipping('${esc(w.name)}','${esc(w.phone)}','${esc(w.addr)}','${esc(cat)}',this)">택배양식</button>
       </div>
     </div>
     ${done && !sent && !(verifiedAddr && verifiedAddr.verified) ? `<div class="verify-action-row"><button class="copy-btn verify-btn" onclick="verifyWinnerAddress('${esc(cat)}','${esc(w.name)}','${esc(w.phone)}','${esc(w.addr)}')">주소 자동검증</button></div>` : ''}`;
