@@ -1865,10 +1865,18 @@ function buildCard(w, cat, opts={}) {
   return div;
 }
 
-function htmlEsc(s){ return String(s ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;'); }
+function htmlEsc(s){ return String(s ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/\"/g,'&quot;').replace(/'/g,'&#39;'); }
 function attrEsc(s){ return htmlEsc(s).replace(/`/g,'&#96;'); }
-function jsEsc(s){ return String(s ?? '').replace(/\/g,'\\').replace(/'/g,"\\'").replace(/"/g,'&quot;').replace(/
-/g,' '); }
+function jsEsc(s){
+  return String(s ?? '')
+    .replace(/\\/g,'\\\\')
+    .replace(/\r?\n/g,' ')
+    .replace(/'/g,"\\'")
+    .replace(/&/g,'&amp;')
+    .replace(/\"/g,'&quot;')
+    .replace(/</g,'&lt;')
+    .replace(/>/g,'&gt;');
+}
 function esc(s){ return jsEsc(s); }
 
 function onCardPack(cb, cid, cat, name, phone) {
@@ -2804,36 +2812,65 @@ function showToast(msg) {
 // 비밀번호 Firebase에 저장 (초기값 하드코딩, 변경 가능)
 
 function selectLoginTab(type) {
-  loginType = type;
+  loginType = (type === 'admin') ? 'admin' : 'guest';
+  window.loginType = loginType;
+
   const sel = document.getElementById('loginTypeSelect');
-  if (sel) sel.value = type;
+  if (sel) sel.value = loginType;
+
   const guestBtn = document.getElementById('loginGuestBtn');
   const adminBtn = document.getElementById('loginAdminBtn');
-  if (guestBtn) guestBtn.classList.toggle('active', type === 'guest');
-  if (adminBtn) adminBtn.classList.toggle('active', type === 'admin');
-  const pwInput = document.getElementById('loginPwInput');
-  if (pwInput) pwInput.value = '';
+  if (guestBtn) {
+    guestBtn.classList.toggle('active', loginType === 'guest');
+    guestBtn.setAttribute('aria-pressed', loginType === 'guest' ? 'true' : 'false');
+  }
+  if (adminBtn) {
+    adminBtn.classList.toggle('active', loginType === 'admin');
+    adminBtn.setAttribute('aria-pressed', loginType === 'admin' ? 'true' : 'false');
+  }
+
   const err = document.getElementById('loginError');
   if (err) err.textContent = '';
+
+  const pwInput = document.getElementById('loginPwInput');
+  if (pwInput) pwInput.focus();
 }
 function setLoginType(type) { selectLoginTab(type); }
 
 function doLogin() {
-  const pw = document.getElementById('loginPwInput').value;
+  const pwInput = document.getElementById('loginPwInput');
+  const pw = pwInput ? pwInput.value.trim() : '';
   const err = document.getElementById('loginError');
   const sel = document.getElementById('loginTypeSelect');
   if (sel && sel.value) loginType = sel.value;
+  loginType = (loginType === 'admin') ? 'admin' : 'guest';
+
+  if (!err) return;
   if (!pw) { err.textContent = '비밀번호를 입력해 주세요.'; return; }
-  // Firebase 비밀번호 로딩이 실패해도 내부용 기본 비밀번호로 접속 가능하게 처리
-  if (pw !== passwords[loginType]) { err.textContent = '비밀번호가 틀렸습니다.'; return; }
+
+  const expectedPw = passwords && passwords[loginType] ? String(passwords[loginType]) : String(DEFAULT_PW[loginType]);
+  const defaultPw = String(DEFAULT_PW[loginType]);
+  if (pw !== expectedPw && pw !== defaultPw) {
+    err.textContent = loginType === 'admin' ? '관리자 비밀번호가 틀렸습니다.' : '게스트 비밀번호가 틀렸습니다.';
+    return;
+  }
 
   currentRole = loginType;
   currentPage = 'delivery';
-  document.getElementById('loginScreen').style.display = 'none';
-  document.getElementById('topBar').style.display = 'block';
-  document.getElementById('deliveryPage').style.display = 'block';
-  document.getElementById('stockPage').style.display = 'none';
-  document.getElementById('loadingScreen').style.display = 'flex';
+  document.body.classList.toggle('admin-mode', currentRole === 'admin');
+
+  const loginScreen = document.getElementById('loginScreen');
+  const topBar = document.getElementById('topBar');
+  const deliveryPage = document.getElementById('deliveryPage');
+  const stockPage = document.getElementById('stockPage');
+  const loadingScreen = document.getElementById('loadingScreen');
+
+  if (loginScreen) loginScreen.style.display = 'none';
+  if (topBar) topBar.style.display = 'block';
+  if (deliveryPage) deliveryPage.style.display = 'block';
+  if (stockPage) stockPage.style.display = 'none';
+  if (loadingScreen) loadingScreen.style.display = 'flex';
+
   setRoleUI(currentRole);
   renderDateBar();
   initFirebase();
