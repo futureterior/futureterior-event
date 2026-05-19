@@ -642,6 +642,24 @@ body{
   background:rgba(255,255,255,0.04); border:1px solid rgba(255,255,255,0.06);
   color:#b5b7c9; font-size:11px; line-height:1;
 }
+
+.login-role-grid{ display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-bottom:16px; }
+.login-role-card{
+  border:1px solid rgba(255,255,255,0.08); border-radius:16px;
+  background:rgba(255,255,255,0.04); color:#cfd1e4;
+  padding:13px 12px; text-align:left; cursor:pointer;
+  font-family:'Noto Sans KR',sans-serif; transition:all 0.18s;
+}
+.login-role-card:hover{ border-color:rgba(124,106,247,0.55); background:rgba(124,106,247,0.09); }
+.login-role-card.active{
+  border-color:rgba(124,106,247,0.85); background:linear-gradient(135deg, rgba(124,106,247,0.24), rgba(124,106,247,0.10));
+  box-shadow:0 0 0 4px rgba(124,106,247,0.12);
+}
+.login-role-icon{ display:block; font-size:17px; margin-bottom:5px; }
+.login-role-title{ display:block; font-size:14px; font-weight:800; color:#ffffff; margin-bottom:2px; }
+.login-role-desc{ display:block; font-size:10px; color:#8f91aa; line-height:1.35; }
+.login-hidden-select{ position:absolute; opacity:0; pointer-events:none; width:1px; height:1px; }
+
 .login-form{ position:relative; z-index:1; }
 .login-field{ margin-bottom:14px; }
 .login-label{
@@ -819,13 +837,20 @@ body{
       </div>
 
       <div class="login-form">
+        <input class="login-hidden-select" type="hidden" id="loginTypeSelect" value="guest">
         <div class="login-field">
-          <label class="login-label" for="loginTypeSelect">접속 유형</label>
-          <div class="login-select-wrap">
-            <select class="login-select" id="loginTypeSelect" onchange="loginType=this.value">
-              <option value="guest">👤 게스트</option>
-              <option value="admin">🔑 관리자</option>
-            </select>
+          <label class="login-label">접속 유형</label>
+          <div class="login-role-grid" role="group" aria-label="접속 유형 선택">
+            <button type="button" class="login-role-card active" id="loginGuestBtn" onclick="setLoginType('guest')">
+              <span class="login-role-icon">👤</span>
+              <span class="login-role-title">게스트</span>
+              <span class="login-role-desc">포장·발송 체크</span>
+            </button>
+            <button type="button" class="login-role-card" id="loginAdminBtn" onclick="setLoginType('admin')">
+              <span class="login-role-icon">🔑</span>
+              <span class="login-role-title">관리자</span>
+              <span class="login-role-desc">업로드·삭제·재고 관리</span>
+            </button>
           </div>
         </div>
 
@@ -1448,6 +1473,18 @@ function toggleSent(cat, name, phone) {
 function initFirebase() {
   const dot = document.getElementById('syncDot');
   if (dot) dot.className = 'sync-dot syncing';
+
+  if (!db) {
+    console.warn('Firebase DB가 없어 로컬 표시 모드로 실행합니다.');
+    extraEvents = {};
+    updateStats();
+    rerenderCurrentTab();
+    const loading = document.getElementById('loadingScreen');
+    if (loading) loading.style.display = 'none';
+    if (dot) dot.className = 'sync-dot';
+    showToast('⚠️ Firebase 연결 없이 로컬 표시 모드로 접속했습니다.');
+    return;
+  }
 
   if (firebaseInitialized) {
     updateStats();
@@ -2340,6 +2377,16 @@ function setStockSort(val, btn) {
 }
 
 function initStockFromFirebase() {
+  if (!db) {
+    stockItems = {};
+    INITIAL_STOCK.forEach((item, i) => {
+      const id = 'local_item_' + i;
+      stockItems[id] = {id, name:item.name, qty:item.qty, note:item.note, order:i};
+    });
+    stockReady = true;
+    if (currentPage === 'stock') renderStock();
+    return;
+  }
   db.ref('stock_items').once('value', snap => {
     const val = snap.val();
     if (!val || Object.keys(val).length === 0) {
@@ -2760,15 +2807,24 @@ function selectLoginTab(type) {
   loginType = type;
   const sel = document.getElementById('loginTypeSelect');
   if (sel) sel.value = type;
-  document.getElementById('loginPwInput').value = '';
-  document.getElementById('loginError').textContent = '';
+  const guestBtn = document.getElementById('loginGuestBtn');
+  const adminBtn = document.getElementById('loginAdminBtn');
+  if (guestBtn) guestBtn.classList.toggle('active', type === 'guest');
+  if (adminBtn) adminBtn.classList.toggle('active', type === 'admin');
+  const pwInput = document.getElementById('loginPwInput');
+  if (pwInput) pwInput.value = '';
+  const err = document.getElementById('loginError');
+  if (err) err.textContent = '';
 }
+function setLoginType(type) { selectLoginTab(type); }
 
 function doLogin() {
   const pw = document.getElementById('loginPwInput').value;
   const err = document.getElementById('loginError');
-  if (!passwordsLoaded) { err.textContent = passwordLoadError || '비밀번호를 불러오는 중입니다. 잠시 후 다시 시도해 주세요.'; return; }
+  const sel = document.getElementById('loginTypeSelect');
+  if (sel && sel.value) loginType = sel.value;
   if (!pw) { err.textContent = '비밀번호를 입력해 주세요.'; return; }
+  // Firebase 비밀번호 로딩이 실패해도 내부용 기본 비밀번호로 접속 가능하게 처리
   if (pw !== passwords[loginType]) { err.textContent = '비밀번호가 틀렸습니다.'; return; }
 
   currentRole = loginType;
@@ -2882,6 +2938,11 @@ function deleteCategoryWinners(cat) {
 function loadPasswords() {
   passwordsLoaded = false;
   passwordLoadError = null;
+  if (!db) {
+    passwordsLoaded = true;
+    passwordLoadError = 'Firebase 연결 실패. 기본 비밀번호로 접속합니다.';
+    return Promise.resolve();
+  }
   return db.ref('app_passwords').once('value').then(snap => {
     const val = snap.val() || {};
     if (val.guest) passwords.guest = val.guest;
@@ -2899,18 +2960,28 @@ function loadPasswords() {
 // ════════════════════════════════════════════
 // INIT
 // ════════════════════════════════════════════
-firebase.initializeApp({
-  apiKey:"AIzaSyDlRL6r7a_DkKpbNHglXOrgJ7cQqnRngMM",
-  authDomain:"event-abcff.firebaseapp.com",
-  databaseURL:"https://event-abcff-default-rtdb.firebaseio.com",
-  projectId:"event-abcff",
-  storageBucket:"event-abcff.firebasestorage.app",
-  messagingSenderId:"450632960444",
-  appId:"1:450632960444:web:d63172727cffd0dcdfc3b9"
-});
-db = firebase.database(); // 전역 var db에 할당
+try {
+  if (window.firebase && firebase.initializeApp) {
+    firebase.initializeApp({
+      apiKey:"AIzaSyDlRL6r7a_DkKpbNHglXOrgJ7cQqnRngMM",
+      authDomain:"event-abcff.firebaseapp.com",
+      databaseURL:"https://event-abcff-default-rtdb.firebaseio.com",
+      projectId:"event-abcff",
+      storageBucket:"event-abcff.firebasestorage.app",
+      messagingSenderId:"450632960444",
+      appId:"1:450632960444:web:d63172727cffd0dcdfc3b9"
+    });
+    db = firebase.database(); // 전역 var db에 할당
+  } else {
+    console.warn('Firebase SDK가 로드되지 않았습니다.');
+    db = null;
+  }
+} catch (err) {
+  console.error('Firebase 초기화 실패:', err);
+  db = null;
+}
 
-// 비밀번호 Firebase에서 로드 (저장된 값 있으면 덮어씀)
+// 비밀번호 Firebase에서 로드 (저장된 값 있으면 덮어씀). 실패해도 기본 비밀번호로 접속 가능.
 loadPasswords();
 // loadingScreen은 기본 숨김 상태
 </script>
