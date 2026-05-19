@@ -1,0 +1,2636 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>퓨처테리어 이벤트 경품 배송 관리</title>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@300;400;500;700&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/mammoth/1.6.0/mammoth.browser.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-database-compat.js"></script>
+<style>
+:root {
+  --bg:#0f0f12; --surface:#1a1a22; --surface2:#22222e; --border:#2e2e3e;
+  --accent:#7c6af7; --accent2:#5ef0c0; --text:#e8e8f0; --muted:#7a7a96;
+  --dim:#4a4a62; --tag:#252535; --danger:#f76a6a; --warn:#f7c06a;
+  --ok-bg:#0d1f14; --ok-border:#1e4a2a; --ok:#3a9a5a;
+  --radius:12px; --safe-bottom: env(safe-area-inset-bottom, 0px);
+}
+*{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent;}
+html{scroll-behavior:smooth;}
+body{
+  background:var(--bg); color:var(--text);
+  font-family:'Noto Sans KR',sans-serif; font-size:14px; line-height:1.6;
+  min-height:100vh; padding-bottom:calc(80px + var(--safe-bottom));
+  -webkit-font-smoothing:antialiased;
+}
+
+/* ── TOP HEADER ── */
+.top-bar{
+  position:sticky; top:0; z-index:100;
+  background:rgba(15,15,18,0.92); backdrop-filter:blur(12px);
+  border-bottom:1px solid var(--border);
+  padding:12px 16px;
+}
+.top-bar-inner{max-width:1100px;margin:0 auto;display:flex;align-items:center;gap:10px;flex-wrap:wrap;}
+.app-title{font-size:15px;font-weight:700;flex:1;min-width:120px;}
+.app-title span{color:var(--accent);}
+.sync-dot{
+  width:7px;height:7px;border-radius:50%;background:#555;flex-shrink:0;
+  transition:background 0.3s;
+}
+.sync-dot.online{background:var(--ok);}
+.sync-dot.syncing{background:var(--warn);animation:pulse 1s infinite;}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:0.4}}
+
+/* ── DATE SELECTOR ── */
+.date-bar{
+  background:var(--surface); border-bottom:1px solid var(--border);
+  padding:10px 16px; overflow-x:auto; -webkit-overflow-scrolling:touch;
+  scrollbar-width:none;
+}
+.date-bar::-webkit-scrollbar{display:none;}
+.date-bar-inner{
+  max-width:1100px; margin:0 auto;
+  display:flex; gap:8px; align-items:center; white-space:nowrap;
+}
+.date-chip{
+  display:inline-flex; align-items:center; gap:6px;
+  background:var(--surface2); border:1px solid var(--border);
+  border-radius:20px; padding:6px 14px; font-size:12px;
+  color:var(--muted); cursor:pointer; transition:all 0.2s;
+  white-space:nowrap; flex-shrink:0; font-family:'Noto Sans KR',sans-serif;
+}
+.date-chip:hover{border-color:var(--accent);color:var(--text);}
+.date-chip.active{background:var(--accent);border-color:var(--accent);color:#fff;font-weight:700;}
+.date-chip .chip-count{
+  font-family:'DM Mono',monospace; font-size:10px;
+  background:rgba(255,255,255,0.2); border-radius:10px; padding:1px 6px;
+}
+.date-chip.active .chip-count{background:rgba(255,255,255,0.25);}
+.chip-del{
+  display:inline-flex; align-items:center; justify-content:center;
+  width:16px; height:16px; border-radius:50%;
+  background:rgba(255,255,255,0.15); color:inherit;
+  font-size:10px; line-height:1; margin-left:2px;
+  transition:background 0.15s;
+  flex-shrink:0;
+}
+.date-chip:hover .chip-del{ background:rgba(247,106,106,0.35); color:#f76a6a; }
+.date-chip.active .chip-del{ background:rgba(255,255,255,0.2); }
+.date-chip.active:hover .chip-del{ background:rgba(247,106,106,0.5); color:#fff; }
+.add-date-btn{
+  display:inline-flex; align-items:center; gap:5px;
+  background:none; border:1px dashed var(--border);
+  border-radius:20px; padding:6px 14px; font-size:12px;
+  color:var(--dim); cursor:pointer; transition:all 0.2s;
+  white-space:nowrap; flex-shrink:0; font-family:'Noto Sans KR',sans-serif;
+}
+.add-date-btn:hover{border-color:var(--accent);color:var(--accent);}
+
+/* ── PROGRESS ── */
+.progress-bar-bg{height:3px;background:var(--surface2);}
+.progress-bar-fill{height:100%;background:linear-gradient(90deg,var(--accent),var(--accent2));transition:width 0.4s ease;width:0%;}
+
+/* ── STATS ROW ── */
+.stats-row{
+  max-width:1100px; margin:0 auto;
+  display:grid; grid-template-columns:repeat(4,1fr);
+  gap:8px; padding:12px 16px;
+}
+.stat{
+  background:var(--surface); border:1px solid var(--border);
+  border-radius:10px; padding:10px 8px; text-align:center;
+}
+.stat.ok-stat{border-color:var(--ok-border);}
+.stat-num{font-family:'DM Mono',monospace;font-size:18px;font-weight:500;color:var(--accent2);}
+.stat-num.ok-num{color:var(--ok);}
+.stat-label{font-size:10px;color:var(--muted);margin-top:2px;}
+
+/* ── TABS ── */
+.tab-nav{
+  background:var(--surface); border-bottom:1px solid var(--border);
+  overflow-x:auto; -webkit-overflow-scrolling:touch; scrollbar-width:none;
+}
+.tab-nav::-webkit-scrollbar{display:none;}
+.tab-nav-inner{
+  max-width:1100px; margin:0 auto;
+  display:flex; white-space:nowrap; padding:0 4px;
+}
+.tab-btn{
+  background:none; border:none; border-bottom:2px solid transparent;
+  padding:10px 14px; color:var(--muted); font-size:13px;
+  font-family:'Noto Sans KR',sans-serif; cursor:pointer;
+  transition:all 0.2s; white-space:nowrap; flex-shrink:0;
+  display:inline-flex; align-items:center; gap:6px;
+  margin-bottom:-1px;
+}
+.tab-btn.active{color:var(--text);border-bottom-color:var(--accent);font-weight:700;}
+.tab-badge{
+  font-family:'DM Mono',monospace; font-size:10px;
+  background:var(--tag); border:1px solid var(--border);
+  border-radius:20px; padding:1px 6px; color:var(--muted);
+}
+.tab-btn.active .tab-badge{background:var(--accent);border-color:var(--accent);color:#fff;}
+#btnUnpacked .tab-badge{background:#2e0d0d;border-color:var(--danger);color:var(--danger);}
+#btnUnpacked.active .tab-badge{background:var(--danger);border-color:var(--danger);color:#fff;}
+#btnUnpacked.active{border-bottom-color:var(--danger);}
+#btnPacked .tab-badge{background:var(--ok-bg);border-color:var(--ok-border);color:var(--ok);}
+#btnPacked.active .tab-badge{background:var(--ok);border-color:var(--ok);color:#fff;}
+#btnPacked.active{border-bottom-color:var(--ok);}
+#btnSent .tab-badge{background:#0d1e2e;border-color:#1e4a6a;color:#5eb8f0;}
+#btnSent.active .tab-badge{background:#5eb8f0;border-color:#5eb8f0;color:#fff;}
+#btnSent.active{border-bottom-color:#5eb8f0;}
+
+/* ── TAB CONTENT ── */
+.tab-content{padding:12px 16px 20px;max-width:1100px;margin:0 auto;}
+
+/* ── SEARCH ── */
+.search-wrap{margin-bottom:14px;}
+.search-input{
+  width:100%; background:var(--surface); border:1px solid var(--border);
+  border-radius:10px; padding:10px 14px; color:var(--text); font-size:14px;
+  font-family:'Noto Sans KR',sans-serif; outline:none; transition:border-color 0.2s;
+}
+.search-input:focus{border-color:var(--accent);}
+.search-input::placeholder{color:var(--dim);}
+
+/* ── FILTER ROW ── */
+.filter-row{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:14px;align-items:center;}
+.filter-btn{
+  background:var(--surface); border:1px solid var(--border);
+  border-radius:20px; padding:5px 12px; color:var(--muted); font-size:11px;
+  cursor:pointer; transition:all 0.2s; font-family:'Noto Sans KR',sans-serif;
+}
+.filter-btn:hover,.filter-btn.active{background:var(--accent);border-color:var(--accent);color:#fff;}
+.filter-btn.all-packed{opacity:0.38;text-decoration:line-through;}
+.filter-btn.all-packed.active{opacity:0.6;background:var(--ok-bg);border-color:var(--ok-border);color:var(--ok);text-decoration:line-through;}
+.filter-btn.cat-shipped{opacity:0.32;text-decoration:line-through;color:var(--ok)!important;border-color:var(--ok-border)!important;}
+.filter-packed-toggle{
+  margin-left:auto; background:var(--surface); border:1px solid var(--border);
+  border-radius:20px; padding:5px 12px; color:var(--muted); font-size:11px;
+  cursor:pointer; transition:all 0.2s; font-family:'Noto Sans KR',sans-serif;
+}
+.filter-packed-toggle.on{background:var(--ok-bg);border-color:var(--ok-border);color:var(--ok);}
+
+/* ── SECTION ── */
+.section{margin-bottom:28px;}
+.section-header{
+  display:flex; align-items:center; gap:8px;
+  margin-bottom:10px; padding-bottom:8px; border-bottom:1px solid var(--border);
+}
+.section-title{font-size:13px;font-weight:700;flex:1;line-height:1.4;}
+.section-count{
+  font-family:'DM Mono',monospace; font-size:11px; color:var(--muted);
+  background:var(--tag); border:1px solid var(--border);
+  border-radius:20px; padding:2px 8px; flex-shrink:0;
+}
+.section-badge{font-size:10px;padding:2px 8px;border-radius:20px;font-weight:500;flex-shrink:0;}
+.badge-purple{background:#2d2060;color:var(--accent);border:1px solid var(--accent);}
+.badge-green{background:#0d2e26;color:var(--accent2);border:1px solid var(--accent2);}
+.badge-orange{background:#2e1e0d;color:var(--warn);border:1px solid var(--warn);}
+.badge-red{background:#2e0d0d;color:var(--danger);border:1px solid var(--danger);}
+
+/* ── WINNER GRID ── */
+.winners-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:8px;}
+@media(max-width:600px){.winners-grid{grid-template-columns:1fr;}}
+
+/* ── WINNER CARD ── */
+.winner-card{
+  background:var(--surface); border:1px solid var(--border);
+  border-radius:var(--radius); overflow:hidden;
+  transition:border-color 0.2s, background 0.3s, opacity 0.3s, transform 0.25s;
+}
+@keyframes cardSlideIn {
+  from { opacity:0; transform:translateY(-8px) scale(0.97); }
+  to   { opacity:1; transform:translateY(0)    scale(1); }
+}
+@keyframes cardSlideOut {
+  from { opacity:1; transform:translateY(0)    scale(1);    max-height:300px; margin-bottom:8px; }
+  to   { opacity:0; transform:translateY(8px)  scale(0.97); max-height:0;     margin-bottom:0; }
+}
+.card-entering { animation: cardSlideIn 0.22s ease forwards; }
+.card-leaving  { animation: cardSlideOut 0.2s ease forwards; overflow:hidden; pointer-events:none; }
+.winner-card.is-dup{border-left:3px solid var(--warn);}
+.winner-card.packed{background:var(--ok-bg);border-color:var(--ok-border);opacity:0.8;}
+.winner-card.packed .winner-name{color:var(--ok);}
+.winner-card.packed .winner-phone{color:#3a7a5a;}
+.winner-card.packed .winner-address{color:#2a5a3a;}
+.winner-card.sent-card{background:#0a1520;border-color:#1e4a6a;opacity:0.65;}
+.winner-card.sent-card .winner-name{color:#5eb8f0;}
+.winner-card.sent-card .winner-phone{color:#3a6a8a;}
+.winner-card.sent-card .winner-address{color:#2a4a5a;}
+
+/* 카드 상단 정보 영역 */
+.card-body{padding:12px 14px 10px;}
+.card-name-row{display:flex;align-items:flex-start;justify-content:space-between;gap:8px;margin-bottom:3px;}
+.winner-name{font-size:14px;font-weight:700;line-height:1.3;flex:1;}
+.card-tag{
+  font-size:10px;border-radius:10px;padding:2px 8px;font-weight:600;
+  white-space:nowrap;flex-shrink:0;margin-top:1px;
+}
+.tag-dup{background:#2e1e0d;color:var(--warn);border:1px solid var(--warn);}
+.tag-packed{background:var(--ok-bg);color:var(--ok);border:1px solid var(--ok-border);}
+.tag-sent{background:#0d1e2e;color:#5eb8f0;border:1px solid #1e4a6a;}
+.winner-phone{font-family:'DM Mono',monospace;font-size:12px;color:var(--accent2);margin-bottom:6px;}
+.winner-address{font-size:12px;color:var(--muted);line-height:1.5;}
+
+/* 카드 하단 액션 영역 */
+.card-footer{
+  display:flex;align-items:stretch;
+  border-top:1px solid var(--border);
+}
+.card-check-group{
+  flex:1;display:flex;flex-direction:column;
+  border-right:1px solid var(--border);
+}
+.card-check-row{
+  display:flex;align-items:center;gap:8px;
+  padding:7px 12px;
+  border-bottom:1px solid var(--border);
+}
+.card-check-row:last-child{border-bottom:none;}
+.pack-label{
+  display:flex;align-items:center;gap:6px;flex:1;
+  cursor:pointer;user-select:none;
+}
+.pack-checkbox{display:none;}
+.pack-box{
+  width:16px;height:16px;border:1.5px solid var(--border);border-radius:4px;
+  background:var(--surface2);display:flex;align-items:center;justify-content:center;
+  flex-shrink:0;transition:all 0.18s;
+}
+.pack-box svg{display:none;}
+.pack-checkbox:checked + .pack-box{background:#1a4a2a;border-color:var(--ok);}
+.pack-checkbox:checked + .pack-box svg{display:block;}
+.pack-text{font-size:11px;color:var(--muted);}
+.pack-checkbox:checked ~ .pack-text{color:var(--ok);font-weight:600;}
+.pack-time{font-family:'DM Mono',monospace;font-size:10px;color:var(--dim);margin-left:auto;white-space:nowrap;}
+
+/* 발송완료 체크 */
+.sent-box{background:#0d1e2e;border-color:#5eb8f0;}
+.sent-box svg{display:block;}
+.sent-text{color:#5eb8f0;font-weight:600;}
+.sent-time{color:#3a7aaa;}
+.disabled-check{opacity:0.3;pointer-events:none;}
+
+/* 복사 버튼 */
+.copy-btn{
+  background:none;border:none;
+  color:var(--dim);font-size:11px;cursor:pointer;
+  padding:0 12px;min-width:44px;
+  display:flex;align-items:center;justify-content:center;
+  transition:color 0.2s;font-family:'Noto Sans KR',sans-serif;
+}
+.copy-btn:active{color:var(--accent);}
+
+/* ── COMBINED GRID ── */
+.combined-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:10px;}
+@media(max-width:600px){.combined-grid{grid-template-columns:1fr;}}
+.combined-intro{
+  background:#1e1608;border:1px solid var(--warn);border-radius:10px;
+  padding:10px 14px;font-size:12px;color:var(--warn);margin-bottom:14px;
+}
+.combined-card{
+  background:var(--surface);border:1px solid var(--warn);
+  border-radius:var(--radius);overflow:hidden;
+  transition:border-color 0.2s,opacity 0.3s,background 0.3s;
+}
+.combined-card.all-sent{background:#0a1520;border-color:#1e4a6a;opacity:0.65;}
+.combined-card.all-packed{background:var(--ok-bg);border-color:var(--ok-border);opacity:0.8;}
+
+/* 합배송 카드 헤더 */
+.combined-header{
+  padding:11px 14px;display:flex;align-items:center;gap:8px;
+  border-bottom:1px solid var(--border);background:#1e1608;
+}
+.combined-card.all-packed .combined-header{background:#0d1f14;}
+.combined-card.all-sent .combined-header{background:#0a1520;}
+.combined-name{font-size:14px;font-weight:700;flex:1;}
+.combined-phone{font-family:'DM Mono',monospace;font-size:11px;color:var(--accent2);}
+.combined-badge{
+  font-size:10px;border-radius:20px;padding:2px 8px;font-weight:700;flex-shrink:0;
+}
+.combined-addr{
+  padding:8px 14px;font-size:12px;color:var(--muted);
+  border-bottom:1px solid var(--border);
+}
+
+/* 합배송 아이템 목록 */
+.combined-items{padding:8px 14px;display:flex;flex-direction:column;gap:6px;}
+.combined-item{
+  display:flex;align-items:center;gap:8px;
+  padding:6px 0;border-bottom:1px solid var(--border);
+}
+.combined-item:last-child{border-bottom:none;}
+.item-cat{font-size:12px;flex:1;line-height:1.3;}
+.item-checks{display:flex;gap:6px;flex-shrink:0;}
+.item-check-btn{
+  display:flex;align-items:center;gap:4px;
+  border:1px solid var(--border);border-radius:6px;
+  padding:3px 8px;font-size:10px;cursor:pointer;
+  background:none;color:var(--dim);font-family:'Noto Sans KR',sans-serif;
+  transition:all 0.2s;white-space:nowrap;
+}
+.item-check-btn.pack-active{background:var(--ok-bg);border-color:var(--ok-border);color:var(--ok);}
+.item-check-btn.sent-active{background:#0d1e2e;border-color:#1e4a6a;color:#5eb8f0;}
+.item-check-btn .btn-dot{
+  width:6px;height:6px;border-radius:50%;background:currentColor;flex-shrink:0;
+}
+
+/* 합배송 카드 하단 */
+.combined-footer{
+  display:flex;align-items:center;justify-content:space-between;
+  padding:8px 14px;border-top:1px solid var(--border);
+}
+.combined-status{font-size:11px;color:var(--muted);}
+.combined-copy-btn{
+  background:none;border:1px solid var(--border);border-radius:6px;
+  color:var(--dim);font-size:11px;cursor:pointer;padding:4px 10px;
+  transition:all 0.2s;font-family:'Noto Sans KR',sans-serif;
+}
+.combined-copy-btn:active{border-color:var(--accent);color:var(--accent);}
+
+/* ── MODAL ── */
+.modal-overlay{
+  position:fixed;inset:0;background:rgba(0,0,0,0.7);z-index:200;
+  display:flex;align-items:flex-end;justify-content:center;
+  opacity:0;pointer-events:none;transition:opacity 0.25s;
+}
+.modal-overlay.open{opacity:1;pointer-events:all;}
+.modal{
+  background:var(--surface);border-radius:16px 16px 0 0;
+  border-top:1px solid var(--border);
+  padding:20px 20px calc(20px + var(--safe-bottom));
+  width:100%;max-width:480px;
+  transform:translateY(20px);transition:transform 0.25s;
+}
+.modal-overlay.open .modal{transform:translateY(0);}
+.modal-title{font-size:16px;font-weight:700;margin-bottom:16px;}
+.modal-input{
+  width:100%;background:var(--surface2);border:1px solid var(--border);
+  border-radius:10px;padding:12px 14px;color:var(--text);font-size:15px;
+  font-family:'Noto Sans KR',sans-serif;outline:none;margin-bottom:12px;
+}
+.modal-input:focus{border-color:var(--accent);}
+.modal-actions{display:flex;gap:10px;}
+.modal-btn{
+  flex:1;padding:12px;border-radius:10px;border:none;
+  font-size:14px;font-weight:700;cursor:pointer;font-family:'Noto Sans KR',sans-serif;
+}
+.modal-btn.primary{background:var(--accent);color:#fff;}
+.modal-btn.cancel{background:var(--surface2);color:var(--muted);}
+
+
+/* ── CATEGORY SHIPPED ── */
+.section.shipped { opacity: 0.45; }
+.section.shipped .section-title { text-decoration: line-through; color: var(--ok); }
+.section.shipped .section-header { pointer-events: none; }
+.section.shipped .section-ship-btn { pointer-events: all; }
+.section.shipped .winners-grid { filter: grayscale(0.6); }
+.section-ship-btn {
+  background: none; border: 1px solid var(--border); border-radius: 20px;
+  padding: 3px 10px; font-size: 10px; color: var(--dim);
+  cursor: pointer; font-family: 'Noto Sans KR', sans-serif;
+  transition: all 0.2s; white-space: nowrap; flex-shrink: 0;
+  pointer-events: all;
+}
+.section-ship-btn:hover { border-color: var(--ok); color: var(--ok); }
+.section-ship-btn.shipped { background: var(--ok-bg); border-color: var(--ok-border); color: var(--ok); }
+
+
+/* ── PAGE TABS ── */
+.page-tab-row{
+  max-width:1100px; margin:8px auto 0;
+  display:flex; gap:4px; border-bottom:1px solid var(--border); padding-bottom:0;
+}
+.page-tab{
+  background:none; border:none; border-bottom:2px solid transparent;
+  padding:7px 16px; color:var(--muted); font-size:13px;
+  font-family:'Noto Sans KR',sans-serif; cursor:pointer;
+  transition:all 0.2s; white-space:nowrap; margin-bottom:-1px;
+}
+.page-tab:hover{color:var(--text);}
+.page-tab.active{color:var(--text);border-bottom-color:var(--accent);font-weight:700;}
+
+/* ── STOCK PAGE ── */
+#stockPage{display:none;}
+.stock-toolbar{
+  max-width:1100px; margin:0 auto;
+  display:flex; gap:10px; align-items:center; padding:14px 16px;
+  flex-wrap:wrap;
+}
+.stock-search{
+  flex:1; min-width:160px; background:var(--surface); border:1px solid var(--border);
+  border-radius:10px; padding:9px 13px; color:var(--text); font-size:14px;
+  font-family:'Noto Sans KR',sans-serif; outline:none; transition:border-color 0.2s;
+}
+.stock-search:focus{border-color:var(--accent);}
+.stock-search::placeholder{color:var(--dim);}
+.stock-add-btn{
+  background:var(--accent); border:none; border-radius:10px;
+  padding:9px 18px; color:#fff; font-size:13px; font-weight:700;
+  cursor:pointer; font-family:'Noto Sans KR',sans-serif;
+  white-space:nowrap; flex-shrink:0;
+}
+.stock-stats{
+  max-width:1100px; margin:0 auto;
+  display:flex; gap:10px; padding:0 16px 12px; flex-wrap:wrap;
+}
+.stock-stat{
+  background:var(--surface); border:1px solid var(--border);
+  border-radius:10px; padding:8px 16px; display:flex; align-items:center; gap:8px;
+}
+.stock-stat-num{font-family:'DM Mono',monospace;font-size:18px;font-weight:500;color:var(--accent2);}
+.stock-stat-label{font-size:11px;color:var(--muted);}
+.stock-table-wrap{
+  max-width:1100px; margin:0 auto; padding:0 16px 40px;
+  overflow-x:auto; -webkit-overflow-scrolling:touch;
+}
+.stock-table{
+  width:100%; border-collapse:collapse; font-size:13px;
+}
+.stock-table th{
+  background:var(--surface2); color:var(--muted); font-size:11px;
+  font-weight:500; padding:9px 12px; text-align:left;
+  border-bottom:1px solid var(--border); white-space:nowrap;
+  position:sticky; top:0;
+}
+.stock-table td{
+  padding:10px 12px; border-bottom:1px solid var(--border);
+  vertical-align:middle;
+}
+.stock-table tr:hover td{background:var(--surface2);}
+.stock-table tr.zero-stock td{opacity:0.38;}
+.stock-name-cell{font-weight:500; line-height:1.4;}
+.stock-name-row{display:flex;align-items:flex-start;justify-content:space-between;gap:10px;}
+.stock-qty-mobile{
+  font-family:'DM Mono',monospace;font-size:15px;font-weight:700;
+  color:var(--accent2);flex-shrink:0;padding-top:1px;display:none;
+}
+.stock-qty-mobile.zero{color:var(--danger);}
+.stock-qty{
+  font-family:'DM Mono',monospace; font-size:14px; font-weight:700;
+  color:var(--accent2);
+}
+.stock-qty.zero{color:var(--danger);}
+.stock-note{font-size:11px;color:var(--muted);max-width:200px;}
+.stock-note.opened{color:var(--warn);}
+.stock-actions{display:flex;gap:6px;white-space:nowrap;}
+.stock-btn{
+  background:none; border:1px solid var(--border); border-radius:6px;
+  padding:4px 10px; font-size:11px; color:var(--dim); cursor:pointer;
+  font-family:'Noto Sans KR',sans-serif; transition:all 0.2s;
+}
+.stock-btn.edit:hover{border-color:var(--accent);color:var(--accent);}
+.stock-btn.del:hover{border-color:var(--danger);color:var(--danger);}
+/* ── STOCK FILTER BAR ── */
+.stock-filter-bar{
+  max-width:1100px; margin:0 auto;
+  display:flex; gap:8px; padding:0 16px 12px; flex-wrap:wrap; align-items:center;
+}
+.stock-filter-chip{
+  background:var(--surface); border:1px solid var(--border);
+  border-radius:20px; padding:5px 13px; font-size:12px; color:var(--muted);
+  cursor:pointer; transition:all 0.2s; font-family:'Noto Sans KR',sans-serif;
+  white-space:nowrap;
+}
+.stock-filter-chip:hover{ border-color:var(--accent); color:var(--text); }
+.stock-filter-chip.active{ background:var(--accent); border-color:var(--accent); color:#fff; }
+.stock-filter-chip.open-active{ background:#2e1e0d; border-color:var(--warn); color:var(--warn); }
+.stock-sort-chip{
+  background:var(--surface); border:1px solid var(--border);
+  border-radius:20px; padding:5px 13px; font-size:12px; color:var(--muted);
+  cursor:pointer; transition:all 0.2s; font-family:'Noto Sans KR',sans-serif;
+  white-space:nowrap; display:inline-flex; align-items:center; gap:5px;
+}
+.stock-sort-chip:hover{ border-color:var(--accent2); color:var(--text); }
+.stock-sort-chip.active{ background:#0d2e26; border-color:var(--accent2); color:var(--accent2); }
+.sort-arrow{ font-size:10px; }
+.stock-filter-divider{
+  width:1px; height:18px; background:var(--border); flex-shrink:0; margin:0 2px;
+}
+
+/* edit mode inline */
+.stock-edit-input{
+  background:var(--surface2); border:1px solid var(--accent);
+  border-radius:6px; padding:4px 8px; color:var(--text); font-size:13px;
+  font-family:'Noto Sans KR',sans-serif; outline:none; width:100%;
+}
+.stock-qty-input{
+  background:var(--surface2); border:1px solid var(--accent);
+  border-radius:6px; padding:4px 8px; color:var(--text);
+  font-family:'DM Mono',monospace; font-size:13px; outline:none; width:70px;
+}
+
+/* ── EMPTY STATE ── */
+.no-results{
+  text-align:center;color:var(--muted);padding:48px 20px;
+  font-size:13px;line-height:2;
+}
+
+/* ── UPLOAD MODAL ── */
+.upload-modal{
+  background:var(--surface); border-radius:16px 16px 0 0;
+  border-top:1px solid var(--border);
+  padding:20px 20px calc(24px + var(--safe-bottom));
+  width:100%; max-width:520px;
+  transform:translateY(20px); transition:transform 0.25s;
+  max-height:90vh; overflow-y:auto;
+}
+.modal-overlay.open .upload-modal{ transform:translateY(0); }
+.upload-drop-zone{
+  border:2px dashed var(--border); border-radius:12px;
+  padding:32px 20px; text-align:center; color:var(--muted);
+  font-size:13px; cursor:pointer; transition:all 0.2s;
+  margin-bottom:14px;
+}
+.upload-drop-zone:hover, .upload-drop-zone.drag-over{
+  border-color:var(--accent); color:var(--accent); background:rgba(124,106,247,0.05);
+}
+.upload-drop-icon{ font-size:32px; margin-bottom:8px; }
+.upload-drop-hint{ font-size:11px; color:var(--dim); margin-top:6px; }
+.upload-file-input{ display:none; }
+.upload-parsing{
+  display:none; text-align:center; padding:20px;
+  color:var(--muted); font-size:13px;
+}
+.upload-parsing.show{ display:block; }
+.upload-result-wrap{ display:none; }
+.upload-result-wrap.show{ display:block; }
+.upload-result-header{
+  display:flex; align-items:center; justify-content:space-between;
+  margin-bottom:10px;
+}
+.upload-result-title{ font-size:13px; font-weight:700; color:var(--text); }
+.upload-result-count{
+  font-family:'DM Mono',monospace; font-size:12px;
+  background:var(--ok-bg); border:1px solid var(--ok-border);
+  color:var(--ok); border-radius:20px; padding:2px 10px;
+}
+.upload-preview-list{
+  max-height:240px; overflow-y:auto; margin-bottom:14px;
+  border:1px solid var(--border); border-radius:10px;
+  scrollbar-width:thin; scrollbar-color:var(--border) transparent;
+}
+.upload-preview-item{
+  padding:10px 14px; border-bottom:1px solid var(--border); font-size:12px;
+}
+.upload-preview-item:last-child{ border-bottom:none; }
+.upload-preview-cat{ font-weight:700; color:var(--accent); margin-bottom:4px; font-size:11px; }
+.upload-preview-winner{ color:var(--text); margin-bottom:2px; }
+.upload-preview-addr{ color:var(--muted); font-size:11px; }
+.upload-error{
+  background:#2e0d0d; border:1px solid var(--danger); border-radius:10px;
+  padding:12px 14px; font-size:12px; color:var(--danger); margin-bottom:12px;
+  display:none;
+}
+.upload-error.show{ display:block; }
+.upload-actions{ display:flex; gap:10px; }
+
+/* ── LOGIN ── */
+.login-screen{
+  position:fixed;inset:0;background:var(--bg);z-index:400;
+  display:flex;flex-direction:column;align-items:center;justify-content:center;
+  padding:20px;
+}
+.login-box{
+  background:var(--surface);border:1px solid var(--border);
+  border-radius:16px;padding:32px 28px;width:100%;max-width:360px;
+}
+.login-logo{ font-size:28px; text-align:center; margin-bottom:6px; }
+.login-title{ font-size:16px;font-weight:700;text-align:center;margin-bottom:4px; }
+.login-subtitle{ font-size:12px;color:var(--muted);text-align:center;margin-bottom:24px; }
+.login-tabs{
+  display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-bottom:20px;
+}
+.login-tab-btn{
+  padding:8px;border-radius:8px;border:1px solid var(--border);
+  background:var(--surface2);color:var(--muted);font-size:13px;
+  cursor:pointer;font-family:'Noto Sans KR',sans-serif;transition:all 0.2s;
+}
+.login-tab-btn.active{background:var(--accent);border-color:var(--accent);color:#fff;font-weight:700;}
+.login-input{
+  width:100%;background:var(--surface2);border:1px solid var(--border);
+  border-radius:10px;padding:12px 14px;color:var(--text);font-size:14px;
+  font-family:'Noto Sans KR',sans-serif;outline:none;margin-bottom:12px;
+  transition:border-color 0.2s;
+}
+.login-input:focus{border-color:var(--accent);}
+.login-input::placeholder{color:var(--dim);}
+.login-btn{
+  width:100%;padding:12px;border-radius:10px;border:none;
+  background:var(--accent);color:#fff;font-size:14px;font-weight:700;
+  cursor:pointer;font-family:'Noto Sans KR',sans-serif;margin-top:4px;
+  transition:opacity 0.2s;
+}
+.login-btn:active{opacity:0.85;}
+.login-error{
+  font-size:12px;color:var(--danger);text-align:center;
+  margin-top:10px;min-height:18px;
+}
+/* 관리자 전용 요소 */
+.admin-only{ display:none; }
+.admin-mode .admin-only{ display:inline-flex; }
+/* 상단 권한 배지 */
+.role-badge{
+  font-size:10px;border-radius:20px;padding:2px 8px;font-weight:600;
+  cursor:pointer;transition:all 0.2s;
+}
+.role-badge.guest{background:#2e1e0d;color:var(--warn);border:1px solid var(--warn);}
+.role-badge.admin{background:var(--ok-bg);color:var(--ok);border:1px solid var(--ok-border);}
+/* 비밀번호 변경 모달 */
+.pw-modal{
+  background:var(--surface);border-radius:16px 16px 0 0;
+  border-top:1px solid var(--border);
+  padding:24px 20px calc(24px + var(--safe-bottom));
+  width:100%;max-width:400px;
+  transform:translateY(20px);transition:transform 0.25s;
+}
+.modal-overlay.open .pw-modal{transform:translateY(0);}
+
+/* ── LOADING ── */
+.loading-screen{
+  position:fixed;inset:0;background:var(--bg);z-index:300;
+  display:flex;flex-direction:column;align-items:center;justify-content:center;gap:16px;
+}
+.loading-spinner{
+  width:32px;height:32px;border:3px solid var(--border);
+  border-top-color:var(--accent);border-radius:50%;animation:spin 0.8s linear infinite;
+}
+@keyframes spin{to{transform:rotate(360deg);}}
+.loading-text{font-size:13px;color:var(--muted);}
+
+@media(min-width:768px){
+  .tab-content{padding:16px 24px 24px;}
+  .stats-row{padding:14px 24px;gap:12px;}
+}
+@media(max-width:600px){
+  .card-body{padding:10px 12px 8px;}
+  .winner-name{font-size:13px;}
+  .winner-address{font-size:11px;}
+  .item-cat{font-size:11px;}
+  .item-check-btn{padding:3px 6px;font-size:10px;}
+  .combined-header{padding:10px 12px;}
+  .combined-addr{padding:7px 12px;font-size:11px;}
+  .combined-items{padding:6px 12px;}
+  .combined-footer{padding:7px 12px;}
+}
+
+/* ── STOCK MOBILE ── */
+@media(max-width:640px){
+  /* 필터바 */
+  .stock-filter-bar{ gap:6px; padding:0 16px 10px; overflow-x:auto; flex-wrap:nowrap; scrollbar-width:none; }
+  .stock-filter-bar::-webkit-scrollbar{ display:none; }
+  .stock-filter-divider{ display:none; }
+
+  /* 툴바 */
+  .stock-toolbar{ gap:8px; padding:12px 16px 10px; }
+  .stock-search{ font-size:14px; }
+  .stock-add-btn{ padding:9px 14px; font-size:13px; }
+
+  /* stats 2열 그리드 */
+  .stock-stats{ display:grid; grid-template-columns:1fr 1fr; gap:8px; padding:0 16px 12px; }
+  .stock-stat{ border-radius:10px; padding:10px 12px; }
+  .stock-stat-num{ font-size:16px; }
+
+  /* 테이블 래퍼 */
+  .stock-table-wrap{ padding:0 16px 40px; overflow-x:visible; }
+
+  /* 테이블 → 카드 */
+  .stock-table{ display:block; }
+  .stock-table thead{ display:none; }
+  .stock-table tbody{ display:flex; flex-direction:column; gap:8px; }
+  .stock-table tr{
+    display:flex; flex-direction:column;
+    background:var(--surface); border:1px solid var(--border);
+    border-radius:var(--radius); padding:12px 14px; gap:0;
+  }
+  .stock-table tr.zero-stock{ opacity:0.42; }
+  .stock-table td{ display:block; padding:0; border:none; }
+
+  /* 번호 숨김 */
+  .stock-table td:first-child{ display:none; }
+
+  /* 상단 행: 제품명 + 수량 (stock-name-row 내부) */
+  .stock-table td:nth-child(2){ margin-bottom:5px; }
+  .stock-name-cell{ font-size:14px; font-weight:700; line-height:1.4; flex:1; }
+
+  /* 수량 td 숨김 (모바일에선 name-row 안에 표시) */
+  .stock-table td:nth-child(3){ display:none; }
+  .stock-qty-mobile{ display:block; }
+
+  /* 비고 */
+  .stock-table td:nth-child(4){
+    font-size:12px; color:var(--muted); margin-bottom:8px; min-height:16px;
+  }
+  .stock-note.opened{ color:var(--warn); }
+
+  /* 버튼 행 */
+  .stock-table td:nth-child(5){ display:flex; gap:8px; }
+  .stock-btn{
+    flex:1; padding:7px 0; font-size:12px; text-align:center;
+    border-radius:8px;
+  }
+  .stock-btn.edit{ border-color:var(--border); color:var(--muted); }
+  .stock-btn.del{ border-color:var(--border); color:var(--muted); }
+}
+</style>
+</head>
+<body>
+
+<!-- Login Screen -->
+<div class="login-screen" id="loginScreen">
+  <div class="login-box">
+    <div class="login-logo">🎁</div>
+    <div class="login-title">퓨처테리어 경품 관리</div>
+    <div class="login-subtitle">접속 유형을 선택하고 비밀번호를 입력해 주세요</div>
+    <div class="login-tabs">
+      <button class="login-tab-btn active" id="loginTabGuest" onclick="selectLoginTab('guest')">👤 게스트</button>
+      <button class="login-tab-btn" id="loginTabAdmin" onclick="selectLoginTab('admin')">🔑 관리자</button>
+    </div>
+    <input class="login-input" type="password" id="loginPwInput" placeholder="비밀번호 입력" onkeydown="if(event.key==='Enter')doLogin()">
+    <button class="login-btn" onclick="doLogin()">접속</button>
+    <div class="login-error" id="loginError"></div>
+  </div>
+</div>
+
+<!-- Password Change Modal -->
+<div class="modal-overlay" id="pwModalOverlay" onclick="closePwModalIfOutside(event)">
+  <div class="pw-modal">
+    <div class="modal-title">🔐 비밀번호 변경</div>
+    <div style="font-size:12px;color:var(--muted);margin-bottom:16px" id="pwModalDesc"></div>
+    <input class="modal-input" type="password" id="pwCurrentInput" placeholder="현재 비밀번호">
+    <input class="modal-input" type="password" id="pwNewInput" placeholder="새 비밀번호">
+    <input class="modal-input" type="password" id="pwConfirmInput" placeholder="새 비밀번호 확인">
+    <div style="font-size:12px;color:var(--danger);min-height:16px;margin-bottom:10px" id="pwError"></div>
+    <div class="modal-actions">
+      <button class="modal-btn cancel" onclick="closePwModal()">취소</button>
+      <button class="modal-btn primary" onclick="changePassword()">변경</button>
+    </div>
+  </div>
+</div>
+
+<!-- Loading -->
+<div class="loading-screen" id="loadingScreen">
+  <div class="loading-spinner"></div>
+  <div class="loading-text">Firebase 연결 중...</div>
+</div>
+
+<!-- Top Bar -->
+<div class="top-bar">
+  <div class="top-bar-inner">
+    <div class="app-title">🎁 퓨처테리어 <span>이벤트 경품 배송 관리</span></div>
+    <div class="sync-dot" id="syncDot" title="연결 상태"></div>
+    <span class="role-badge guest" id="roleBadge" onclick="openPwModal()" title="클릭하여 비밀번호 변경">👤 게스트</span>
+    <button style="background:none;border:1px solid var(--border);border-radius:8px;padding:4px 10px;color:var(--muted);font-size:11px;cursor:pointer;font-family:'Noto Sans KR',sans-serif" onclick="logout()">로그아웃</button>
+  </div>
+  <!-- Page Tabs -->
+  <div class="page-tab-row">
+    <button class="page-tab active" id="pageTabDelivery" onclick="switchPage('delivery')">📦 이벤트 경품 배송 관리</button>
+    <button class="page-tab" id="pageTabStock" onclick="switchPage('stock')">🗂 퓨처테리어 경품 관리</button>
+  </div>
+</div>
+
+<!-- DELIVERY PAGE -->
+<div id="deliveryPage">
+
+<!-- Date Bar -->
+<div class="date-bar">
+  <div class="date-bar-inner" id="dateBar">
+
+  </div>
+</div>
+
+<!-- Progress -->
+<div class="progress-bar-bg"><div class="progress-bar-fill" id="progressFill"></div></div>
+
+<!-- Stats -->
+<div class="stats-row">
+  <div class="stat"><div class="stat-num" id="statTotal">-</div><div class="stat-label">총 당첨자</div></div>
+  <div class="stat ok-stat"><div class="stat-num ok-num" id="statPacked">0</div><div class="stat-label">포장완료</div></div>
+  <div class="stat" style="border-color:#1e3a5a"><div class="stat-num" style="color:#5eb8f0" id="statSent">0</div><div class="stat-label">발송완료</div></div>
+  <div class="stat"><div class="stat-num" id="statUnpacked">-</div><div class="stat-label">미포장</div></div>
+  <div class="stat"><div class="stat-num" id="statCombined">-</div><div class="stat-label">합배송</div></div>
+</div>
+
+<!-- Tabs -->
+<div class="tab-nav">
+  <div class="tab-nav-inner">
+    <button class="tab-btn active" id="btnCombined" onclick="switchTab('combined')">📦 합배송 <span class="tab-badge" id="badgeCombined">-</span></button>
+    <button class="tab-btn" id="btnUnpacked" onclick="switchTab('unpacked')">🚨 미포장 <span class="tab-badge" id="badgeUnpacked">-</span></button>
+    <button class="tab-btn" id="btnPacked" onclick="switchTab('packed')">📦 포장완료 <span class="tab-badge" id="badgePacked">-</span></button>
+    <button class="tab-btn" id="btnSent" onclick="switchTab('sent')">🚚 발송완료 <span class="tab-badge" id="badgeSent">-</span></button>
+    <button class="tab-btn" id="btnAll" onclick="switchTab('all')">📋 전체 <span class="tab-badge" id="badgeAll">-</span></button>
+  </div>
+</div>
+
+<!-- Combined Tab -->
+<div id="tabCombined" class="tab-content">
+  <div class="search-wrap"><input class="search-input" id="searchCombined" placeholder="이름, 연락처, 주소 검색..." oninput="renderCombined()"></div>
+  <div class="combined-intro">📦 동일 이름+연락처로 2개 이상 당첨 — 합배송 처리</div>
+  <div class="combined-grid" id="combinedGrid"></div>
+  <div class="no-results hidden" id="noResCombined">합배송 대상이 없습니다.</div>
+</div>
+
+<!-- Unpacked Tab -->
+<div id="tabUnpacked" class="tab-content" style="display:none">
+  <div class="search-wrap"><input class="search-input" id="searchUnpacked" placeholder="이름, 연락처, 주소 검색..." oninput="renderUnpacked()"></div>
+  <div id="unpackedContent"></div>
+  <div class="no-results hidden" id="noResUnpacked">🎉 모든 포장 완료!</div>
+</div>
+
+<!-- Packed Tab -->
+<div id="tabPacked" class="tab-content" style="display:none">
+  <div class="search-wrap"><input class="search-input" id="searchPacked" placeholder="이름, 연락처, 주소 검색..." oninput="renderPacked()"></div>
+  <div id="packedContent"></div>
+  <div class="no-results hidden" id="noResPacked">아직 포장 완료된 항목이 없습니다.</div>
+</div>
+
+<!-- Sent Tab -->
+<div id="tabSent" class="tab-content" style="display:none">
+  <div class="search-wrap"><input class="search-input" id="searchSent" placeholder="이름, 연락처, 주소 검색..." oninput="renderSent()"></div>
+  <div id="sentContent"></div>
+  <div class="no-results hidden" id="noResSent">아직 발송완료된 항목이 없습니다.</div>
+</div>
+
+<!-- All Tab -->
+<div id="tabAll" class="tab-content" style="display:none">
+  <div class="search-wrap"><input class="search-input" id="searchAll" placeholder="이름, 연락처, 주소 검색..." oninput="renderAll()"></div>
+  <div class="filter-row" id="filterRow">
+    <button class="filter-btn filter-all active" onclick="setFilter('all',this)">전체</button>
+    <button class="filter-packed-toggle" id="packedToggle" onclick="toggleHidePacked()">포장완료 숨기기</button>
+  </div>
+  <div id="allContent"></div>
+  <div class="no-results hidden" id="noResAll">검색 결과가 없습니다.</div>
+</div>
+
+</div><!-- /deliveryPage -->
+
+<!-- STOCK PAGE -->
+<div id="stockPage">
+  <div class="stock-toolbar">
+    <input class="stock-search" id="stockSearch" placeholder="제품명, 비고 검색..." oninput="renderStock()">
+    <button class="stock-add-btn" onclick="openAddStockModal()">＋ 제품 추가</button>
+  </div>
+  <div class="stock-filter-bar">
+    <button class="stock-filter-chip active" onclick="setStockFilter('all',this)">전체</button>
+    <button class="stock-filter-chip" onclick="setStockFilter('opened',this)">개봉</button>
+    <button class="stock-filter-chip" onclick="setStockFilter('unopened',this)">미개봉</button>
+    <button class="stock-filter-chip" onclick="setStockFilter('zero',this)">재고없음</button>
+    <div class="stock-filter-divider"></div>
+    <button class="stock-sort-chip" id="sortQtyDesc" onclick="setStockSort('qty_desc',this)"><span>수량</span><span class="sort-arrow">↓</span></button>
+    <button class="stock-sort-chip" id="sortQtyAsc"  onclick="setStockSort('qty_asc',this)"><span>수량</span><span class="sort-arrow">↑</span></button>
+    <button class="stock-sort-chip" id="sortDefault" onclick="setStockSort('default',this)" style="display:none">등록순</button>
+  </div>
+  <div class="stock-stats">
+    <div class="stock-stat"><div class="stock-stat-num" id="stockTotal">-</div><div class="stock-stat-label">총 품목</div></div>
+    <div class="stock-stat"><div class="stock-stat-num" id="stockTotalQty">-</div><div class="stock-stat-label">총 수량</div></div>
+    <div class="stock-stat"><div class="stock-stat-num" id="stockZero">-</div><div class="stock-stat-label">재고 없음</div></div>
+    <div class="stock-stat"><div class="stock-stat-num" id="stockOpened">-</div><div class="stock-stat-label">개봉</div></div>
+  </div>
+  <div class="stock-table-wrap">
+    <table class="stock-table">
+      <thead>
+        <tr>
+          <th style="width:40px">#</th>
+          <th>제품명</th>
+          <th style="width:70px">수량</th>
+          <th>비고</th>
+          <th style="width:100px">관리</th>
+        </tr>
+      </thead>
+      <tbody id="stockTableBody"></tbody>
+    </table>
+  </div>
+</div>
+
+<!-- Add Stock Modal -->
+<div class="modal-overlay" id="stockModalOverlay" onclick="closeStockModalIfOutside(event)">
+  <div class="modal">
+    <div class="modal-title" id="stockModalTitle">➕ 제품 추가</div>
+    <input class="modal-input" id="stockNameInput" type="text" placeholder="제품명">
+    <div style="display:flex;gap:10px">
+      <input class="modal-input" id="stockQtyInput" type="number" placeholder="수량" min="0" style="flex:1">
+      <input class="modal-input" id="stockNoteInput" type="text" placeholder="비고 (예: 개봉)" style="flex:2">
+    </div>
+    <input type="hidden" id="stockEditId">
+    <div class="modal-actions">
+      <button class="modal-btn cancel" onclick="closeStockModal()">취소</button>
+      <button class="modal-btn primary" onclick="saveStock()">저장</button>
+    </div>
+  </div>
+</div>
+
+<!-- Upload Modal -->
+<div class="modal-overlay" id="uploadModalOverlay" onclick="closeUploadModalIfOutside(event)">
+  <div class="upload-modal">
+    <div class="modal-title">📂 당첨자 파일 업로드</div>
+    <div class="upload-drop-zone" id="uploadDropZone"
+      onclick="document.getElementById('uploadFileInput').click()"
+      ondragover="onDragOver(event)" ondragleave="onDragLeave(event)" ondrop="onDrop(event)">
+      <div class="upload-drop-icon">📄</div>
+      <div>.txt / .docx / .xlsx / .csv 파일을 올려주세요</div>
+      <div class="upload-drop-hint">탭하거나 드래그해서 파일 선택</div>
+    </div>
+    <input class="upload-file-input" type="file" id="uploadFileInput" accept=".txt,.docx,.doc,.xlsx,.xls,.csv" onchange="onFileSelected(event)">
+
+    <div class="upload-parsing" id="uploadParsing">
+      <div class="loading-spinner" style="margin:0 auto 10px"></div>
+      AI가 당첨자 정보를 분석 중입니다...
+    </div>
+
+    <div class="upload-error" id="uploadError"></div>
+
+    <div class="upload-result-wrap" id="uploadResultWrap">
+      <div class="upload-result-header">
+        <div class="upload-result-title">파싱 결과 미리보기</div>
+        <div class="upload-result-count" id="uploadResultCount">0명</div>
+      </div>
+      <div class="upload-preview-list" id="uploadPreviewList"></div>
+      <div class="upload-actions">
+        <button class="modal-btn cancel" onclick="closeUploadModal()">취소</button>
+        <button class="modal-btn primary" onclick="confirmUpload()">리스트에 추가</button>
+      </div>
+    </div>
+
+    <div id="uploadInitActions" class="upload-actions" style="margin-top:4px">
+      <button class="modal-btn cancel" onclick="closeUploadModal()">닫기</button>
+    </div>
+  </div>
+</div>
+
+<!-- Add Date Modal -->
+<div class="modal-overlay" id="modalOverlay" onclick="closeModalIfOutside(event)">
+  <div class="modal">
+    <div class="modal-title">📅 날짜 추가</div>
+    <input class="modal-input" id="dateInput" type="date" placeholder="날짜 선택">
+    <input class="modal-input" id="dateLabelInput" type="text" placeholder="라벨 (예: 1차 이벤트, 브릭사 캠페인)">
+    <div class="modal-actions">
+      <button class="modal-btn cancel" onclick="closeModal()">취소</button>
+      <button class="modal-btn primary" onclick="addDate()">추가</button>
+    </div>
+  </div>
+</div>
+
+<script>
+// ════════════════════════════════════════════
+// FIREBASE
+// ════════════════════════════════════════════
+// Firebase already initialized above
+const db = firebase.database();
+
+// ════════════════════════════════════════════
+// DATA — 날짜별 그룹
+// ════════════════════════════════════════════
+const EVENTS = [
+  {
+    id: "2025-05-19",
+    date: "2025-05-19",
+    label: "1차 이벤트",
+    data: [
+      { category:"피부피부 퍼퓸 피니쉬 룸스프레이", badge:"badge-purple", note:"향 랜덤 · 10명", winners:[
+        {name:"황재민",phone:"010-2274-6980",addr:"서울특별시 마포구 동교로 19길 102, 601호 (엔트라움마포)"},
+        {name:"김성대",phone:"010-4083-9007",addr:"전남 보성군 보성읍 송재로 212 2층 왼쪽집"},
+        {name:"김태형",phone:"010-8415-0673",addr:"부산광역시 서구 까치고개로 239 701호 (현관 종1230)"},
+        {name:"윤근식",phone:"010-9309-3094",addr:"전라남도 여수시 소호6길 15-6 라비앙로즈 502호"},
+        {name:"고영재",phone:"010-2014-2717",addr:"서울특별시 강서구 월정로20길 58 (화곡동, 리치아파트) 102동 906호"},
+        {name:"홍훈기",phone:"010-3297-8197",addr:"인천시 서구 드림로 226 검암상사"},
+        {name:"김경수",phone:"010-3785-8308",addr:"경남 창원시 진해구 조천북로 147, 102동 402호"},
+        {name:"정인규",phone:"010-5272-2721",addr:"경기도 양주시 부흥로 2152-11, 103동 201호"},
+        {name:"김민석",phone:"010-6534-1041",addr:"서울 영등포구 당산동1가 319 301호"},
+        {name:"이수혁",phone:"010-2433-5282",addr:"충남 계룡시 팥거리로 16 티원 203호"},
+      ]},
+      { category:"피부피부 아로마 피니쉬 룸스프레이", badge:"badge-purple", note:"향 랜덤 · 7명", winners:[
+        {name:"박민규",phone:"010-9207-4342",addr:"경기도 화성시 비봉면 새비봉서로 20 예미지센트럴에듀 102동 301호"},
+        {name:"이선빈",phone:"010-8569-4149",addr:"경기도 수원시 팔달구 월드컵로 207, 501호"},
+        {name:"조민형",phone:"010-8549-0303",addr:"서울시 구로구 경인로 302 105-1203"},
+        {name:"김이진",phone:"010-9868-9694",addr:"대구광역시 달서구 상화북로 159, 6동 305호"},
+        {name:"이흥철",phone:"010-5221-3538",addr:"서울특별시 관악구 행운1가길 27 명은빌라 302호"},
+        {name:"박성진",phone:"010-2730-1307",addr:"서울특별시 송파구 위례송파로 80 1406동 202호"},
+        {name:"박준서",phone:"010-5630-2091",addr:"국산로 21-16 106동 1004호"},
+      ]},
+      { category:"피부피부 스프레이 (추가)", badge:"badge-purple", note:"14명", winners:[
+        {name:"이재민",phone:"010-3361-4276",addr:"인천시 서구 염곡로464번길 11 서울대효청라병원 신경과"},
+        {name:"박준렬",phone:"010-6346-0145",addr:"대구시 동구 율하동 휴먼시아 5단지 505동 806호"},
+        {name:"강효진",phone:"010-8483-7022",addr:"부산시 서구 초장로 51-6, 4층"},
+        {name:"정재완",phone:"010-9636-5659",addr:"군산시 백토로 263 호수공원아이파크 106동 1001호"},
+        {name:"이현구",phone:"010-4792-3250",addr:"경기도 부천시 원미구 심중로 111번가길 8 4층"},
+        {name:"정민기",phone:"010-2443-7148",addr:"인천광역시 서구 열우물로240번길 20, 110동 2002호"},
+        {name:"정한뜻",phone:"010-2824-2002",addr:"경기 고양시 덕양구 향기4로 17 하우스토리 340호"},
+        {name:"임채환",phone:"010-6767-2507",addr:"경기도 군포시 오금로 16 다산아파트 319동 1402호"},
+        {name:"송병찬",phone:"010-2974-7074",addr:"세종특별자치시 한누리대로 587 까사리움 806호"},
+        {name:"김현제",phone:"010-3118-9318",addr:"서울시 서대문구 북가좌1동(수색로100) DMC래미안아파트 202동 709호"},
+        {name:"임재석",phone:"010-4189-5350",addr:"대전시 지족북로 60 207동 2202호"},
+        {name:"정원형",phone:"010-2549-6157",addr:"울산광역시 동구 번덕로 32 옆 대문 열고 1층"},
+        {name:"김대승",phone:"010-3464-0330",addr:"인천광역시 미추홀구 능해길 32 고층 동아아파트 2동 514호"},
+        {name:"이정현",phone:"010-8766-8623",addr:"전남 순천시 연향2로 55 102동 1402호"},
+      ]},
+      { category:"필립스 위즈 전구", badge:"badge-green", note:"5명", winners:[
+        {name:"강원진",phone:"010-6309-8508",addr:"서울특별시 관악구 난곡로 122, 201호 (한국순대)"},
+        {name:"차현진",phone:"010-4534-1006",addr:"부산 부산진구 동평로 192, 508호"},
+        {name:"장재필",phone:"010-6210-4728",addr:"경기도 화성시 송산면 송산로 179 창대기업"},
+        {name:"심효진",phone:"010-8240-1673",addr:"서울 마포구 와우산로 94 학생회관 G동 429호"},
+        {name:"권태훈",phone:"010-2818-1991",addr:"대구광역시 동구 율하서로 59 507동 1104호"},
+      ]},
+      { category:"필립스 위즈 그라디언트 플로어", badge:"badge-green", note:"1명", winners:[
+        {name:"이은샘",phone:"010-9021-2064",addr:"부천시 원미구 부흥로 49 2726동 1006호"},
+      ]},
+      { category:"필립스 위즈 그라디언트 컬러 플로어", badge:"badge-green", note:"1명", winners:[
+        {name:"윤해성",phone:"010-2012-1015",addr:"전라남도 순천시 이수1길 28-38 주택"},
+      ]},
+      { category:"오아 쁘띠차저 35W", badge:"badge-orange", note:"1명", winners:[
+        {name:"배진숙",phone:"010-6788-3708",addr:"부산시 사상로223번길 23 센트럴스타힐스 103동 2204호"},
+      ]},
+      { category:"오아 쁘띠차저 67W", badge:"badge-orange", note:"2명", winners:[
+        {name:"진준희",phone:"010-8643-9217",addr:"전북특별자치도 전주시 덕진구 혁신로 655 107동 2302호"},
+        {name:"공태호",phone:"010-2730-5392",addr:"경남 통영시 통영해안로 484 1번지 광우명작빌라 2동 2층 202호"},
+      ]},
+      { category:"오아 쁘띠차저 100W", badge:"badge-orange", note:"1명", winners:[
+        {name:"김은우",phone:"010-5930-5596",addr:"경기도 화성시 남양읍 고향의봄길 197-27"},
+      ]},
+      { category:"앤커 사운드코어 스페이스원 노이즈캔슬링 헤드폰", badge:"badge-green", note:"2명", winners:[
+        {name:"임채근",phone:"010-8997-9232",addr:"경북 구미시 산동읍 산호대로41길 14-52"},
+        {name:"황재현",phone:"010-8029-1673",addr:"서울시 마포구 와우산로 18길 23 5-b"},
+      ]},
+      { category:"앤커 사운드코어 스페이스원 A3035 헤드폰", badge:"badge-green", note:"1명", winners:[
+        {name:"김민주",phone:"010-7683-7987",addr:"경기도 포천시 일동면 소야1길 18-12 102호"},
+      ]},
+      { category:"앤커 맥고 나노 파워뱅크 A1665", badge:"badge-green", note:"5000mAh · 1명", winners:[
+        {name:"장은호",phone:"010-9514-1820",addr:"부산광역시 사상구 엄궁북로 62 롯데캐슬아파트 104동 902호"},
+      ]},
+      { category:"로우모 듀얼레스트 LC99", badge:"badge-orange", note:"1명", winners:[
+        {name:"이찬호",phone:"010-3333-6295",addr:"대구광역시 수성구 신매로 51 시지천마타운 231동 203호"},
+      ]},
+      { category:"로우모 발받침대 Comfort", badge:"badge-orange", note:"색상 랜덤 · 1명", winners:[
+        {name:"진정순",phone:"010-9399-2361",addr:"울산광역시 울주군 언양읍 서부리 삼성아파트 102동 1104호"},
+      ]},
+      { category:"헥스칼 케이블 매니지먼트 키트", badge:"badge-orange", note:"2명", winners:[
+        {name:"윤정훈",phone:"010-7676-8350",addr:"인천광역시 미추홀구 인하로 222번길 20, 주안파크자이더플래티넘 305동 405호"},
+      ]},
+      { category:"헥스칼 케이블 매니지먼트 키트 (일반 1차)", badge:"badge-orange", note:"1명", winners:[
+        {name:"김현지",phone:"010-4464-1448",addr:"서울 노원구 섬밭로 229 건영아파트 5동 1311호"},
+      ]},
+      { category:"후후루 플랜트 오브제", badge:"badge-purple", note:"2명", winners:[
+        {name:"조민경",phone:"010-4557-9175",addr:"경기도 안양시 동안구 시민대로 287 608호"},
+        {name:"유승철",phone:"010-8979-9817",addr:"경기도 과천시 과천대로8길 15, 406동 2201호"},
+      ]},
+      { category:"브릭사 데스크매트", badge:"badge-orange", note:"색상 랜덤 · 1명", winners:[
+        {name:"진수민",phone:"010-4559-7335",addr:"부산 북구 함박봉로140번길 21 112동 806호"},
+      ]},
+      { category:"벤큐 스크린바 헤일로2", badge:"badge-green", note:"7명", winners:[
+        {name:"이찬호",phone:"010-3333-6295",addr:"대구광역시 수성구 신매로 51 시지천마타운 231동 203호"},
+        {name:"이재영",phone:"010-6472-7976",addr:"전라남도 승달산길 24 904호"},
+        {name:"이정행",phone:"010-9245-8957",addr:"효원로308번길 16, 한화꿈에그린파크 101동 803호"},
+        {name:"정도경",phone:"010-9411-6327",addr:"전라북도 장수군 계남면 고양로 573-73 과수원"},
+        {name:"김인식",phone:"010-4684-5945",addr:"부산시 사하구 하신중앙로 265 가락타운3단지 313동 403호"},
+        {name:"정은진",phone:"010-3190-8512",addr:"전라북도 장수군 계남면 장수로 2652-4 천일사과직판장"},
+        {name:"백종민",phone:"010-2927-9257",addr:"서울시 서대문구 통일로 397, 1동 1001호"},
+      ]},
+      { category:"벤큐 스크린바 프로 (오프레임 이벤트)", badge:"badge-green", note:"2명", winners:[
+        {name:"송경준",phone:"010-2799-4891",addr:"경기도 의왕시 부곡중앙로 13-5, 202호"},
+        {name:"이충호",phone:"010-2300-3780",addr:"전북 전주시 전주객사 1길 60-4"},
+      ]},
+      { category:"[디붐] Pixoo 64 디지털 액자", badge:"badge-red", note:"사용흔적 있음 · 1명", winners:[
+        {name:"남정일",phone:"010-7906-9089",addr:"서울특별시 강동구 올림픽로 757 (암사동, 헬마빌딩) 308호"},
+      ]},
+      { category:"[일리안] 베이직 모듈러 듀얼 모니터 받침대 블랙", badge:"badge-orange", note:"1명", winners:[
+        {name:"송용하",phone:"010-5158-7938",addr:"전남 순천시 신대로 96, 319동 302호"},
+      ]},
+      { category:"[일리안] 피카 듀얼 메탈 모니터 받침대 (색상 랜덤)", badge:"badge-orange", note:"2명", winners:[
+        {name:"박규단",phone:"010-7764-3752",addr:"동구릉로 85번길 52 602동 1806호"},
+        {name:"장경석",phone:"010-9370-1148",addr:"대구광역시 수성구 욱수천로 133 106동 2001호 (사월보성아파트2차)"},
+      ]},
+      { category:"[일리안] 피카 듀얼 메탈 모니터 받침대 (일반 2차)", badge:"badge-orange", note:"2명", winners:[
+        {name:"김윤중",phone:"010-3478-5250",addr:"서울 은평구 역말로9길 37-23 1층"},
+        {name:"금기윤",phone:"010-8876-8518",addr:"서울시 용산구 효창원로 276 월드부동산"},
+      ]},
+      { category:"[일리안] 파일 마우스패드 가죽 키보드 장패드 데스크매트", badge:"badge-orange", note:"2명", winners:[
+        {name:"조강현",phone:"010-4617-8936",addr:"경기도 시흥시 시흥대로 1110 101동 1403호"},
+        {name:"황영익",phone:"010-3322-3972",addr:"경기도 부천시 오정구 오정로 251번길 39, 103동 202호"},
+      ]},
+      { category:"레이저 헌츠맨 미니 HAEYONG 각인", badge:"badge-red", note:"1명", winners:[
+        {name:"김영진",phone:"010-3345-7526",addr:"인천시 부평구 부흥로243번 39, 욱일아파트 4동 1405호"},
+      ]},
+      { category:"[펠로우즈] 라이징 프리미엄 듀얼 슬라이드 모니터암", badge:"badge-orange", note:"1명", winners:[
+        {name:"현종호",phone:"010-4372-0950",addr:"대전광역시 동구 동서대로 1579 홍도아파트 105동 1804호"},
+      ]},
+      { category:"ROG 가방", badge:"badge-orange", note:"1명", winners:[
+        {name:"임서영",phone:"010-3921-9551",addr:"전북 고창군 흥덕면 김소희길 13"},
+      ]},
+      { category:"레이저 가방", badge:"badge-orange", note:"1명", winners:[
+        {name:"진준희",phone:"010-8643-9217",addr:"전북특별자치도 전주시 덕진구 혁신로 655 107동 2302호"},
+      ]},
+      { category:"레이저 신발 US 11.5 하이버전", badge:"badge-red", note:"1명", winners:[
+        {name:"홍훈기",phone:"010-3297-8197",addr:"인천시 서구 드림로 226 검암상사"},
+      ]},
+      { category:"레이저 신발 US 11.5 (2종류)", badge:"badge-red", note:"1명", winners:[
+        {name:"のこReef",phone:"010-2335-5109",addr:"서울특별시 은평구 응암2동 백련산로 38 힐스테이트2차 205동 902호"},
+      ]},
+      { category:"인피니티랩 30W 충전기", badge:"badge-green", note:"3명", winners:[
+        {name:"신경수",phone:"010-2624-7043",addr:"대전 동구 가양동 아침마을아파트 113동 502호"},
+        {name:"장찬희",phone:"010-2888-1735",addr:"충남 보령시 봉황로 103 105동 201호"},
+        {name:"권태훈",phone:"010-2818-1991",addr:"대구광역시 동구 율하서로 59 507동 1104호"},
+      ]},
+      { category:"인피니티랩 20W 충전기", badge:"badge-green", note:"3명", winners:[
+        {name:"고웅건",phone:"010-8477-7775",addr:"충청남도 아산시 온천대로1333번길 7 (방축동, 동아나래1차아파트) 101동 1406호"},
+        {name:"김수지",phone:"010-4864-2976",addr:"부산 사상구 사상로277번길 22-5 덕포1동 한내행복마을 여성안심택배함"},
+        {name:"신정수",phone:"010-9448-5777",addr:"서울시 광진구 구의동 78-3 진양빌딩 405호"},
+      ]},
+      { category:"에디파이어 QD25", badge:"badge-green", note:"1명", winners:[
+        {name:"이성훈",phone:"010-9130-8822",addr:"강원특별자치도 원주시 나비허리길 188, 802동 1303호"},
+      ]},
+      { category:"오딕트 PLATFORM 고속무선충전패드", badge:"badge-orange", note:"1명", winners:[
+        {name:"이석원",phone:"010-7150-4564",addr:"대전광역시 동구 대전로 542번길 78-1, 204동 601호 (천동, 휴먼시아2단지)"},
+      ]},
+      { category:"오딕트 DOT Zero 25W 고속충전기", badge:"badge-orange", note:"C타입 · 1명", winners:[
+        {name:"조성래",phone:"010-5470-3864",addr:"전남 보성군 벌교읍 장좌월곡길 63 한마음노인복지센터"},
+      ]},
+      { category:"[언리시] RingTone 맥세이프 보조배터리 5000mAh", badge:"badge-green", note:"3명", winners:[
+        {name:"정지완",phone:"010-3186-7872",addr:"경기도 고양시 일산서구 하이파크로 113 (덕이동, 하이파크시티) 104동 2203호"},
+        {name:"김근배",phone:"010-2578-7738",addr:"부산시 강서구 에코대로 243 104동 701호"},
+        {name:"조성훈",phone:"010-8817-2786",addr:"경남 통영시 여황로 399-4 (진우일성타운) 802호"},
+      ]},
+      { category:"[언리시] VolttGo.time 애플워치 보조배터리 케이스", badge:"badge-green", note:"1명", winners:[
+        {name:"임락환",phone:"010-3398-1701",addr:"경기도 안양시 동안구 시민대로 272 동양트레벨파크 527호"},
+      ]},
+      { category:"[언리시] 2in1 맥세이프 무선 충전기", badge:"badge-green", note:"2명", winners:[
+        {name:"홍성현",phone:"010-9428-9446",addr:"강원특별자치도 원주시 동부순환로 247 (반곡동 1450-1, 반곡초등학교)"},
+        {name:"유승철",phone:"010-8979-9817",addr:"경기도 과천시 과천대로8길 15, 406동 2201호"},
+      ]},
+      { category:"엑티보 볼케이노 3DD IEM 유선이어폰", badge:"badge-red", note:"일반 1차 · 1명", winners:[
+        {name:"박용민",phone:"010-9066-9915",addr:"서울시 관악구 관천로10길 6-1 성우 501호"},
+      ]},
+      { category:"[필립스] 100주년 TAV2000 레트로 라디오", badge:"badge-green", note:"일반 1차 · 1명", winners:[
+        {name:"이진홍",phone:"010-4454-8834",addr:"충청남도 천안시 미라 14길 18 4층"},
+      ]},
+      { category:"곰돌이 무드라이트", badge:"badge-orange", note:"일반 1차 · 2명", winners:[
+        {name:"정성룡",phone:"010-8364-6174",addr:"서울시 용산구 효창원로 104나길 36 A동 201호"},
+        {name:"김원삼",phone:"010-2622-5345",addr:"부산광역시 사상구 백양대로700번길 23 (덕포동, 덕포청구아파트) 102동 903호"},
+      ]},
+      { category:"덱스탑 고중량 싱글폴 모니터암 HGP35S 블랙", badge:"badge-orange", note:"일반 2차 · 1명", winners:[
+        {name:"손기훈",phone:"010-3668-1835",addr:"충북 제천시 아세아2길 20 장락라비앙로즈 403호"},
+      ]},
+      { category:"[해빗] UC253 PD 65W 초고속충전기 릴케이블", badge:"badge-green", note:"일반 2차 · 2명", winners:[
+        {name:"송하준",phone:"010-5931-5017",addr:"서울특별시 서초구 잠원로117 (아크로리버뷰신반포) 104동 2804호"},
+        {name:"유림",phone:"010-2349-2446",addr:"경남 김해시 율하5로 11 109-1301"},
+      ]},
+      { category:"넥스트홈 타이디업 모니터받침대 우드/블랙", badge:"badge-orange", note:"2명", winners:[
+        {name:"김정민",phone:"010-8866-1330",addr:"경기도 김포시 중봉로58번길 46 쌍용a 107동 1101호"},
+        {name:"김명종",phone:"010-2608-1349",addr:"경상북도 상주시 냉림3길 67-14 (냉림동, 미소지움더퍼스트) 102동 303호"},
+      ]},
+      { category:"굿즈랩스튜디오 경품", badge:"badge-purple", note:"7명", winners:[
+        {name:"남승혁",phone:"010-4245-5114",addr:"경기 의왕시 내손중앙로 68 인덕원자이sk뷰 119동 604호"},
+        {name:"이정훈",phone:"010-6326-3207",addr:"전북 정읍시 수성택지1길 12-7 푸르지오 302호"},
+        {name:"한승표",phone:"010-4118-0137",addr:"경기도 고양시 덕양구 지도로103번길 61 201동 1601호"},
+        {name:"유병국",phone:"010-5315-6209",addr:"경남 고성군 회화면 회진로 27-13 유병국동물병원 2층진료실"},
+        {name:"변영은",phone:"010-4650-1899",addr:"경북 포항시 북구 두호로 65, 201-2203"},
+        {name:"이기우",phone:"010-9270-6457",addr:"충청남도 금산군 금산읍 비호산로 5, 107동 804호"},
+        {name:"황일기",phone:"010-3589-2278",addr:"서울특별시 강남구 도곡로78길 22 (대치동, 대치삼성아파트) 103동 206호"},
+      ]},
+    ]
+  }
+];
+
+// Firebase에서 추가 날짜 이벤트도 관리
+let extraEvents = {}; // id → {id, date, label, data:[]}
+
+// ════════════════════════════════════════════
+// STATE
+// ════════════════════════════════════════════
+let packed = {};        // { key: {packed, packDate, packTime, sent, sentDate, sentTime} }
+let currentEventId = EVENTS[0].id;
+let currentTab = 'combined';
+let currentFilter = 'all';
+let hidePackedInAll = false;
+let shippedCats = {}; // key: eventId||cat → true
+let filterBuilt = false;
+
+// ════════════════════════════════════════════
+// HELPERS
+// ════════════════════════════════════════════
+function getCurrentData() {
+  const ev = getAllEvents().find(e => e.id === currentEventId);
+  return ev ? ev.data : [];
+}
+function getAllEvents() {
+  const builtinIds = new Set(EVENTS.map(e=>e.id));
+  // builtin은 EVENTS 데이터(당첨자 포함) 사용, extraEvents에서 제거된 builtin은 제외
+  const deletedBuiltins = new Set(
+    EVENTS.filter(e => !Object.values(extraEvents).find(ex=>ex.id===e.id)).map(e=>e.id)
+  );
+  // extraEvents에 builtin id가 없으면 Firebase에서 삭제된 것
+  const active = [
+    ...EVENTS.filter(e => Object.values(extraEvents).some(ex=>ex.id===e.id)),
+    ...Object.values(extraEvents).filter(ev=>!builtinIds.has(ev.id))
+  ];
+  return active.sort((a,b)=>a.date.localeCompare(b.date));
+}
+function packKey(eventId, cat, name, phone) { return `${eventId}||${cat}||${name}||${phone}`; }
+function fbKey(k) { return btoa(unescape(encodeURIComponent(k))).replace(/[.#$[\]]/g,'_').replace(/\//g,'-'); }
+function isPacked(cat, name, phone) { return !!packed[packKey(currentEventId, cat, name, phone)]?.packed; }
+function isSent(cat, name, phone)   { return !!packed[packKey(currentEventId, cat, name, phone)]?.sent; }
+function getPackedInfo(cat, name, phone) { return packed[packKey(currentEventId, cat, name, phone)] || {}; }
+function nowTime() { const n=new Date(); return String(n.getHours()).padStart(2,'0')+':'+String(n.getMinutes()).padStart(2,'0'); }
+function nowDate() { return new Date().toISOString().slice(0,10); }
+function fmtDate(d) { return d ? d.slice(5).replace('-','.') : ''; } // "MM.DD"
+
+
+
+function catShipKey(cat) { return currentEventId+'||'+cat; }
+function isCatShipped(cat) { return !!shippedCats[catShipKey(cat)]; }
+
+function toggleCatShipped(cat) {
+  const k  = catShipKey(cat);
+  const fk = fbKey('catship||'+k);
+  if (shippedCats[k]) {
+    db.ref('shipped_cats/'+fk).remove();
+    delete shippedCats[k];
+  } else {
+    db.ref('shipped_cats/'+fk).set({ key: k });
+    shippedCats[k] = true;
+  }
+  rerenderCurrentTab();
+}
+
+function getCombinedMap() {
+  const map = {};
+  getCurrentData().forEach(sec => {
+    sec.winners.forEach(w => {
+      const k = w.name+'||'+w.phone;
+      if (!map[k]) map[k]={name:w.name,phone:w.phone,addr:w.addr,items:[],cats:[]};
+      map[k].items.push(sec.category);
+      map[k].cats.push(sec.category);
+    });
+  });
+  return Object.values(map).filter(p=>p.items.length>=2);
+}
+
+function getTotals() {
+  let total=0, packedOnly=0, sentCount=0;
+  getCurrentData().forEach(sec => sec.winners.forEach(w => {
+    total++;
+    const info = getPackedInfo(sec.category, w.name, w.phone);
+    if (info.sent)        sentCount++;
+    else if (info.packed) packedOnly++;
+  }));
+  return {total, packedCount: packedOnly, sentCount, unpacked: total - packedOnly - sentCount};
+}
+
+// ════════════════════════════════════════════
+// FIREBASE SYNC
+// ════════════════════════════════════════════
+function togglePack(cat, name, phone) {
+  const k  = packKey(currentEventId, cat, name, phone);
+  const fk = fbKey(k);
+  const cur = packed[k];
+  if (cur && cur.packed) {
+    // 포장 해제 → 전체 삭제
+    db.ref('packed_v3/'+fk).remove();
+    delete packed[k];
+  } else {
+    const nd = nowDate(); const nt = nowTime();
+    const entry = { key:k, packed:true, packDate:nd, packTime:nt, sent:false, sentDate:'', sentTime:'' };
+    db.ref('packed_v3/'+fk).set(entry);
+    packed[k] = entry;
+  }
+  updateStats();
+}
+
+function toggleSent(cat, name, phone) {
+  const k  = packKey(currentEventId, cat, name, phone);
+  const fk = fbKey(k);
+  const cur = packed[k];
+  if (!cur || !cur.packed) return; // 포장 먼저
+  if (cur.sent) {
+    // 발송 해제
+    const updated = {...cur, sent:false, sentDate:'', sentTime:''};
+    db.ref('packed_v3/'+fk).set(updated);
+    packed[k] = updated;
+  } else {
+    const nd = nowDate(); const nt = nowTime();
+    const updated = {...cur, sent:true, sentDate:nd, sentTime:nt};
+    db.ref('packed_v3/'+fk).set(updated);
+    packed[k] = updated;
+  }
+  updateStats();
+}
+
+function initFirebase() {
+  const dot = document.getElementById('syncDot');
+  dot.className = 'sync-dot syncing';
+
+  // Sync all events (including hardcoded ones) to Firebase on first load
+  db.ref('events').once('value', snap => {
+    const val = snap.val()||{};
+    EVENTS.forEach(ev => {
+      if (!val[fbKey(ev.id)]) {
+        db.ref('events/'+fbKey(ev.id)).set({id:ev.id, date:ev.date, label:ev.label, _builtin:true});
+      }
+    });
+  });
+
+  // Extra events from Firebase
+  db.ref('events').on('value', snap => {
+    extraEvents = {};
+    const val = snap.val()||{};
+    Object.values(val).forEach(ev => { if(ev && ev.id) extraEvents[ev.id] = {...ev, data: ev.data||[]}; });
+    renderDateBar();
+  });
+
+  // Shipped categories
+  db.ref('shipped_cats').on('value', snap => {
+    shippedCats = {};
+    const raw = snap.val()||{};
+    Object.values(raw).forEach(entry => { if(entry && entry.key) shippedCats[entry.key] = true; });
+  });
+
+  // ── v2 → v3 마이그레이션 (최초 1회만 실행)
+  db.ref('migration_done').once('value', flagSnap => {
+    if (flagSnap.val() === 'v5') {
+      console.log('마이그레이션 이미 완료, 스킵');
+      return;
+    }
+    db.ref('packed_v2').once('value', v2snap => {
+      const raw = v2snap.val() || {};
+      const entries = Object.values(raw).filter(e => e && e.key);
+      if (!entries.length) {
+        db.ref('migration_done').set('v5');
+        return;
+      }
+      const writes = {};
+      let sentCount = 0, packedCount = 0;
+      entries.forEach(entry => {
+        const timeStr = entry.time || '00:00';
+        const utcHour = parseInt(timeStr.split(':')[0], 10);
+        const utcMin  = parseInt(timeStr.split(':')[1], 10);
+        const kstTotal = (utcHour * 60 + utcMin + 9 * 60) % (24 * 60);
+        const kstHour  = Math.floor(kstTotal / 60);
+        const isSent = kstHour < 13;
+        const fk = fbKey(entry.key);
+        if (isSent) {
+          sentCount++;
+          writes[fk] = {
+            key:      entry.key, packed: true,
+            packDate: '2025-05-20',
+            packTime: String(kstHour).padStart(2,'0')+':'+String(kstTotal%60).padStart(2,'0'),
+            sent:     true,
+            sentDate: '2025-05-20',
+            sentTime: String(kstHour).padStart(2,'0')+':'+String(kstTotal%60).padStart(2,'0')
+          };
+        } else {
+          packedCount++;
+          writes[fk] = {
+            key:      entry.key, packed: true,
+            packDate: '2025-05-20',
+            packTime: String(kstHour).padStart(2,'0')+':'+String(kstTotal%60).padStart(2,'0'),
+            sent: false, sentDate: '', sentTime: ''
+          };
+        }
+      });
+      console.log('마이그레이션 시작:', entries.length+'건');
+      db.ref('packed_v3').remove().then(() => {
+        db.ref('packed_v3').update(writes).then(() => {
+          db.ref('migration_done').set('v5');
+          console.log('✅ 마이그레이션 완료! 발송:', sentCount+'건 / 포장:', packedCount+'건');
+        });
+      });
+    });
+  });
+
+  // Packed states
+  db.ref('packed_v3').on('value', snap => {
+    packed = {};
+    const raw = snap.val()||{};
+    Object.values(raw).forEach(entry => {
+      if (entry && entry.key) packed[entry.key] = entry;
+    });
+    dot.className = 'sync-dot online';
+    document.getElementById('loadingScreen').style.display = 'none';
+    updateStats();
+    rerenderCurrentTab();
+  });
+}
+
+// ════════════════════════════════════════════
+// DATE BAR
+// ════════════════════════════════════════════
+function renderDateBar() {
+  const bar = document.getElementById('dateBar');
+  const btn = bar.querySelector('.add-date-btn');
+  bar.innerHTML = '';
+
+  getAllEvents().forEach(ev => {
+    const d = ev.data || [];
+    let total=0; d.forEach(sec=>total+=sec.winners.length);
+    const chip = document.createElement('button');
+    chip.className = 'date-chip' + (ev.id===currentEventId ? ' active' : '');
+    const dateStr = ev.date.replace(/-/g,'.').slice(2);
+    const delBtn = `<span class="chip-del" title="삭제" onclick="event.stopPropagation();deleteEvent('${ev.id}','${ev.label.replace(/'/g,"\\'")}')">✕</span>`;
+    chip.innerHTML = `${dateStr} <span style="font-size:11px;color:inherit;opacity:0.8">${ev.label}</span> <span class="chip-count">${total}</span>${delBtn}`;
+    chip.onclick = () => selectEvent(ev.id);
+    bar.appendChild(chip);
+  });
+
+  // ＋ 날짜 추가 버튼
+  const addBtn = document.createElement('button');
+  addBtn.className = 'add-date-btn';
+  addBtn.textContent = '＋ 날짜 추가';
+  addBtn.onclick = openAddDateModal;
+  bar.appendChild(addBtn);
+
+  // 📂 파일 업로드 버튼
+  const upBtn = document.createElement('button');
+  upBtn.className = 'add-date-btn';
+  upBtn.style.cssText = 'border-color:var(--accent);color:var(--accent)';
+  upBtn.textContent = '📂 파일 업로드';
+  upBtn.onclick = openUploadModal;
+  bar.appendChild(upBtn);
+}
+
+function selectEvent(id) {
+  currentEventId = id;
+  currentFilter = 'all';
+  filterBuilt = false;
+  document.getElementById('filterRow').dataset.built = '';
+  renderDateBar();
+  updateStats();
+  rerenderCurrentTab();
+}
+
+// ════════════════════════════════════════════
+// ADD DATE MODAL
+// ════════════════════════════════════════════
+function openAddDateModal() {
+  const today = new Date().toISOString().slice(0,10);
+  document.getElementById('dateInput').value = today;
+  document.getElementById('dateLabelInput').value = '';
+  document.getElementById('modalOverlay').classList.add('open');
+  setTimeout(()=>document.getElementById('dateLabelInput').focus(), 300);
+}
+function closeModal() { document.getElementById('modalOverlay').classList.remove('open'); }
+function closeModalIfOutside(e) { if(e.target===document.getElementById('modalOverlay')) closeModal(); }
+
+function addDate() {
+  const date  = document.getElementById('dateInput').value;
+  const label = document.getElementById('dateLabelInput').value.trim() || '이벤트';
+  if (!date) return;
+  const id = date + '_' + Date.now();
+  const newEvent = {id, date, label, data:[]};
+  db.ref('events/'+fbKey(id)).set(newEvent);
+  closeModal();
+}
+
+function deleteEvent(id, label) {
+  if (!confirm(`"${label}" 날짜 탭을 삭제할까요?\n\n포장/배송 데이터도 함께 삭제됩니다.`)) return;
+
+  // Firebase events 삭제
+  db.ref('events/'+fbKey(id)).remove();
+
+  // 해당 이벤트의 packed_v2 항목 삭제
+  db.ref('packed_v3').once('value', snap => {
+    const raw = snap.val() || {};
+    Object.entries(raw).forEach(([fk, entry]) => {
+      if (entry && entry.key && entry.key.startsWith(id + '||')) {
+        db.ref('packed_v3/' + fk).remove();
+      }
+    });
+  });
+
+  // 해당 이벤트의 shipped_cats 항목 삭제
+  db.ref('shipped_cats').once('value', snap => {
+    const raw = snap.val() || {};
+    Object.entries(raw).forEach(([fk, entry]) => {
+      if (entry && entry.key && entry.key.startsWith(id + '||')) {
+        db.ref('shipped_cats/' + fk).remove();
+      }
+    });
+  });
+
+  // 현재 탭이 삭제된 이벤트면 첫 번째 이벤트로 이동
+  if (currentEventId === id) {
+    const remaining = getAllEvents().filter(e => e.id !== id);
+    currentEventId = remaining.length ? remaining[0].id : EVENTS[0].id;
+    currentFilter = 'all';
+    document.getElementById('filterRow').dataset.built = '';
+    updateStats();
+    rerenderCurrentTab();
+  }
+}
+
+// ════════════════════════════════════════════
+// STATS
+// ════════════════════════════════════════════
+function updateStats() {
+  const {total, packedCount, sentCount, unpacked} = getTotals();
+  const combined = getCombinedMap().length;
+  document.getElementById('statTotal').textContent   = total;
+  document.getElementById('statPacked').textContent  = packedCount;
+  document.getElementById('statUnpacked').textContent= unpacked;
+  document.getElementById('statCombined').textContent= combined;
+  document.getElementById('statSent') && (document.getElementById('statSent').textContent = sentCount);
+  document.getElementById('badgeCombined').textContent= combined;
+  document.getElementById('badgeUnpacked').textContent= unpacked;
+  document.getElementById('badgePacked').textContent  = packedCount;
+  document.getElementById('badgeSent') && (document.getElementById('badgeSent').textContent = sentCount);
+  document.getElementById('badgeAll').textContent     = total;
+  const pct = total>0 ? Math.round(sentCount/total*100) : 0;
+  document.getElementById('progressFill').style.width = pct+'%';
+}
+
+// ════════════════════════════════════════════
+// TAB
+// ════════════════════════════════════════════
+function switchTab(tab) {
+  currentTab = tab;
+  ['combined','unpacked','packed','sent','all'].forEach(t => {
+    document.getElementById('tab'+cap(t)).style.display = t===tab?'block':'none';
+    document.getElementById('btn'+cap(t)).classList.toggle('active', t===tab);
+  });
+  rerenderCurrentTab();
+}
+function cap(s){return s.charAt(0).toUpperCase()+s.slice(1);}
+function rerenderCurrentTab(){
+  if (currentTab==='combined') renderCombined();
+  else if (currentTab==='unpacked') renderUnpacked();
+  else if (currentTab==='packed') renderPacked();
+  else if (currentTab==='sent') renderSent();
+  else renderAll();
+}
+
+// ════════════════════════════════════════════
+// CARD BUILDER
+// ════════════════════════════════════════════
+function checkSVG() {
+  return `<svg width="10" height="8" viewBox="0 0 10 8" fill="none"><path d="M1 4L4 7L9 1" stroke="#3a9a5a" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
+}
+
+function sentSVG() {
+  return `<svg width="10" height="8" viewBox="0 0 10 8" fill="none"><path d="M1 4L4 7L9 1" stroke="#5eb8f0" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
+}
+
+function buildCard(w, cat, opts={}) {
+  const {isDup=false, hidePackRow=false} = opts;
+  const info = getPackedInfo(cat, w.name, w.phone);
+  const done = !!info.packed;
+  const sent = !!info.sent;
+  const cid  = 'c_'+ Math.random().toString(36).slice(2);
+
+  const div = document.createElement('div');
+  div.className = 'winner-card' + (isDup?' is-dup':'') + (sent?' sent-card':done?' packed':'');
+  div.id = cid;
+
+  // 태그
+  let tag = '';
+  if (sent)       tag = `<span class="card-tag tag-sent">🚚 ${fmtDate(info.sentDate)}</span>`;
+  else if (done)  tag = `<span class="card-tag tag-packed">📦 ${fmtDate(info.packDate)}</span>`;
+  else if (isDup) tag = `<span class="card-tag tag-dup">합배송</span>`;
+
+  // footer
+  let footer = '';
+  if (!hidePackRow) {
+    const packTime = done ? `<span class="pack-time">${info.packTime||''}</span>` : '';
+    const sentTime = sent ? `<span class="pack-time sent-time">${info.sentTime||''}</span>` : '';
+
+    footer = `<div class="card-footer">
+      <div class="card-check-group">
+        <div class="card-check-row">
+          <label class="pack-label">
+            <input type="checkbox" class="pack-checkbox" ${done?'checked':''} onchange="onCardPack(this,'${cid}','${esc(cat)}','${esc(w.name)}','${esc(w.phone)}')">
+            <span class="pack-box">${checkSVG()}</span>
+            <span class="pack-text">포장완료</span>
+          </label>
+          ${packTime}
+        </div>
+        <div class="card-check-row ${!done?'disabled-check':''}">
+          <label class="pack-label">
+            <input type="checkbox" class="pack-checkbox" ${sent?'checked':''} ${!done?'disabled':''} onchange="onCardSent(this,'${cid}','${esc(cat)}','${esc(w.name)}','${esc(w.phone)}')">
+            <span class="pack-box ${sent?'sent-box':''}">${sent?sentSVG():''}</span>
+            <span class="pack-text ${sent?'sent-text':''}">발송완료</span>
+          </label>
+          ${sentTime}
+        </div>
+      </div>
+      <button class="copy-btn" onclick="copySingle('${esc(w.name)}','${esc(w.phone)}','${esc(w.addr)}',this)">복사</button>
+    </div>`;
+  }
+
+  div.innerHTML = `
+    <div class="card-body">
+      <div class="card-name-row">
+        <div class="winner-name">${w.name}</div>
+        ${tag}
+      </div>
+      <div class="winner-phone">${w.phone}</div>
+      <div class="winner-address">${w.addr}</div>
+    </div>
+    ${footer}
+  `;
+  return div;
+}
+
+function esc(s){ return (s||'').replace(/'/g,"\\'").replace(/"/g,'&quot;'); }
+
+function onCardPack(cb, cid, cat, name, phone) {
+  togglePack(cat, name, phone);
+  animateCardTransition(cid);
+}
+function onCardSent(cb, cid, cat, name, phone) {
+  toggleSent(cat, name, phone);
+  animateCardTransition(cid);
+}
+
+function animateCardTransition(cid) {
+  const card = document.getElementById(cid);
+  if (!card) { rerenderCurrentTab(); return; }
+
+  // 슬라이드아웃 후 탭 전체 리렌더
+  card.classList.add('card-leaving');
+  card.addEventListener('animationend', () => {
+    rerenderCurrentTab();
+    updateStats();
+    // 미포장/포장/발송 탭 뱃지 업데이트
+    const {total, packedCount, sentCount, unpacked} = getTotals();
+    document.getElementById('badgeUnpacked').textContent = unpacked;
+    document.getElementById('badgePacked').textContent   = packedCount;
+    document.getElementById('badgeSent').textContent     = sentCount;
+    document.getElementById('statPacked').textContent    = packedCount;
+    document.getElementById('statUnpacked').textContent  = unpacked;
+    document.getElementById('statSent') && (document.getElementById('statSent').textContent = sentCount);
+  }, {once: true});
+}
+
+
+// ════════════════════════════════════════════
+// SECTION BUILDER
+// ════════════════════════════════════════════
+function buildSection(sec, countLabel, countStyle='') {
+  const shipped = isCatShipped(sec.category);
+  const sec_el = document.createElement('div');
+  sec_el.className = 'section' + (shipped ? ' shipped' : '');
+  const countCSS = countStyle || '';
+  sec_el.innerHTML = `<div class="section-header">
+    <div class="section-title">${sec.category}</div>
+    <span class="section-count" ${countCSS ? `style="${countCSS}"` : ''}>${countLabel}</span>
+    <button class="section-ship-btn ${shipped?'shipped':''}"
+      onclick="event.stopPropagation();toggleCatShipped('${esc(sec.category)}')"
+      style="pointer-events:all">
+      ${shipped ? '✓ 발송완료' : '발송완료'}
+    </button>
+    <button class="admin-only" style="background:none;border:1px solid #3e1a1a;border-radius:6px;padding:2px 8px;font-size:10px;color:var(--danger);cursor:pointer;font-family:'Noto Sans KR',sans-serif;pointer-events:all"
+      onclick="event.stopPropagation();deleteCategoryWinners('${esc(sec.category)}')">
+      🗑 명단삭제
+    </button>
+  </div><div class="winners-grid"></div>`;
+  return sec_el;
+}
+
+// ════════════════════════════════════════════
+// RENDER COMBINED
+// ════════════════════════════════════════════
+function renderCombined() {
+  const q  = (document.getElementById('searchCombined').value||'').trim().toLowerCase();
+  const cm = getCombinedMap();
+  const filtered = cm.filter(p=>!q||p.name.includes(q)||p.phone.includes(q)||p.addr.toLowerCase().includes(q));
+  const grid = document.getElementById('combinedGrid');
+  grid.innerHTML='';
+
+  filtered.forEach(p => {
+    const allSent   = p.cats.every(cat=>isSent(cat,p.name,p.phone));
+    const allPacked = p.cats.every(cat=>isPacked(cat,p.name,p.phone));
+    const doneCount = p.cats.filter(cat=>isPacked(cat,p.name,p.phone)).length;
+    const sentCount = p.cats.filter(cat=>isSent(cat,p.name,p.phone)).length;
+
+    const card = document.createElement('div');
+    card.className = 'combined-card' + (allSent?' all-sent':allPacked?' all-packed':'');
+
+    // 아이템별 행 (버튼 방식)
+    const itemsHTML = p.cats.map(cat => {
+      const info = getPackedInfo(cat, p.name, p.phone);
+      const done = !!info.packed;
+      const sent = !!info.sent;
+      const shortCat = cat.replace(/^\[.*?\]\s*/,'').substring(0,24);
+      const packCls = done ? 'pack-active' : '';
+      const sentCls = sent ? 'sent-active' : '';
+      return `<div class="combined-item">
+        <div class="item-cat" style="${sent?'color:#5eb8f0;text-decoration:line-through':done?'color:var(--ok)':''}">${shortCat}</div>
+        <div class="item-checks">
+          <button class="item-check-btn ${packCls}" onclick="onCombinedPack(null,'${esc(cat)}','${esc(p.name)}','${esc(p.phone)}')">
+            <span class="btn-dot"></span>포장
+          </button>
+          <button class="item-check-btn ${sentCls}" ${!done?'disabled style="opacity:0.3;cursor:not-allowed"':''} onclick="${done?`onCombinedSent(null,'${esc(cat)}','${esc(p.name)}','${esc(p.phone)}')`:''}">
+            <span class="btn-dot"></span>발송
+          </button>
+        </div>
+      </div>`;
+    }).join('');
+
+    const statusText = allSent ? '🚚 전체 발송완료' : allPacked ? '📦 전체 포장완료' : `📦 ${doneCount}/${p.cats.length} 포장 · 🚚 ${sentCount}/${p.cats.length} 발송`;
+    const badgeStyle = allSent ? 'background:#0d1e2e;color:#5eb8f0;border:1px solid #1e4a6a' : allPacked ? 'background:var(--ok-bg);color:var(--ok);border:1px solid var(--ok-border)' : 'background:#2e1e0d;color:var(--warn);border:1px solid var(--warn)';
+
+    const itemsJSON = JSON.stringify(p.items).replace(/'/g,'&#39;');
+    card.innerHTML = `
+      <div class="combined-header">
+        <div>
+          <div class="combined-name">${p.name}</div>
+          <div class="combined-phone">${p.phone}</div>
+        </div>
+        <span class="combined-badge" style="${badgeStyle}">${p.items.length}개</span>
+      </div>
+      <div class="combined-addr">📍 ${p.addr}</div>
+      <div class="combined-items">${itemsHTML}</div>
+      <div class="combined-footer">
+        <span class="combined-status">${statusText}</span>
+        <button class="combined-copy-btn" data-name="${esc(p.name)}" data-phone="${esc(p.phone)}" data-addr="${esc(p.addr)}" data-items='${itemsJSON}' onclick="copyPerson(this)">📋 복사</button>
+      </div>`;
+    grid.appendChild(card);
+  });
+
+  document.getElementById('noResCombined').classList.toggle('hidden', filtered.length>0);
+}
+
+function onCombinedPack(cb, cat, name, phone) {
+  togglePack(cat, name, phone);
+  renderCombined();
+}
+function onCombinedSent(cb, cat, name, phone) {
+  toggleSent(cat, name, phone);
+  renderCombined();
+}
+
+// ════════════════════════════════════════════
+// RENDER UNPACKED
+// ════════════════════════════════════════════
+function renderUnpacked() {
+  const q = (document.getElementById('searchUnpacked').value||'').trim();
+  const ct = document.getElementById('unpackedContent');
+  ct.innerHTML='';
+  const dupSet=new Set(); getCombinedMap().forEach(p=>dupSet.add(p.name+'||'+p.phone));
+  let hasAny=false;
+
+  getCurrentData().forEach(sec=>{
+    let list=sec.winners.filter(w=>!isPacked(sec.category,w.name,w.phone));
+    if(q) list=list.filter(w=>w.name.includes(q)||w.phone.includes(q)||w.addr.includes(q));
+    if(!list.length) return;
+    hasAny=true;
+    const sec_el = buildSection(sec, list.length+'명', 'color:var(--danger);border-color:#3e1a1a;background:#1e0d0d');
+    ct.appendChild(sec_el);
+    const grid=sec_el.querySelector('.winners-grid');
+    list.forEach(w=>{
+      const c = buildCard(w,sec.category,{isDup:dupSet.has(w.name+'||'+w.phone)});
+      c.classList.add('card-entering');
+      grid.appendChild(c);
+    });
+  });
+  document.getElementById('noResUnpacked').classList.toggle('hidden',hasAny);
+}
+
+// ════════════════════════════════════════════
+// RENDER PACKED
+// ════════════════════════════════════════════
+function renderPacked() {
+  const q=(document.getElementById('searchPacked').value||'').trim();
+  const ct=document.getElementById('packedContent');
+  ct.innerHTML='';
+  const dupSet=new Set(); getCombinedMap().forEach(p=>dupSet.add(p.name+'||'+p.phone));
+
+  // 포장완료(미발송)만 — 날짜별 그룹핑
+  const byDate = {};
+  getCurrentData().forEach(sec=>{
+    sec.winners.forEach(w=>{
+      if (!isPacked(sec.category,w.name,w.phone)) return;
+      if (isSent(sec.category,w.name,w.phone)) return; // 발송된건 발송탭으로
+      const info = getPackedInfo(sec.category,w.name,w.phone);
+      const d = info.packDate||'미상';
+      if(!byDate[d]) byDate[d]=[];
+      byDate[d].push({w, cat:sec.category});
+    });
+  });
+
+  const dates = Object.keys(byDate).sort();
+  let hasAny = dates.length>0;
+
+  dates.forEach(date=>{
+    let items = byDate[date];
+    if(q) items=items.filter(({w,cat})=>w.name.includes(q)||w.phone.includes(q)||w.addr.includes(q)||cat.includes(q));
+    if(!items.length) return;
+
+    // 날짜 헤더
+    const dateHeader = document.createElement('div');
+    dateHeader.innerHTML = `<div style="display:flex;align-items:center;gap:10px;padding:6px 0 10px;margin-bottom:4px;border-bottom:1px solid var(--ok-border)">
+      <span style="font-size:14px;font-weight:700;color:var(--ok)">📦 포장완료 · ${fmtDate(date)||date}</span>
+      <span style="font-family:'DM Mono',monospace;font-size:11px;background:var(--ok-bg);border:1px solid var(--ok-border);color:var(--ok);border-radius:20px;padding:1px 8px">${items.length}명</span>
+    </div>`;
+    ct.appendChild(dateHeader);
+
+    // 날짜 안에서 카테고리별 그룹핑
+    const byCat = {};
+    items.forEach(({w,cat}) => {
+      if(!byCat[cat]) byCat[cat]=[];
+      byCat[cat].push(w);
+    });
+
+    Object.entries(byCat).forEach(([cat, winners]) => {
+      const sec_el = document.createElement('div');
+      sec_el.className = 'section';
+      sec_el.style.marginBottom = '16px';
+      sec_el.innerHTML = `<div class="section-header" style="margin-bottom:8px">
+        <div class="section-title" style="font-size:12px;color:var(--muted)">${cat}</div>
+        <span class="section-count" style="color:var(--ok);border-color:var(--ok-border);background:var(--ok-bg)">${winners.length}명</span>
+      </div><div class="winners-grid"></div>`;
+      ct.appendChild(sec_el);
+      const grid = sec_el.querySelector('.winners-grid');
+      winners.forEach(w => {
+        const c = buildCard(w, cat, {isDup:dupSet.has(w.name+'||'+w.phone)});
+        c.classList.add('card-entering');
+        grid.appendChild(c);
+      });
+    });
+  });
+
+  document.getElementById('noResPacked').classList.toggle('hidden', hasAny);
+}
+
+// ════════════════════════════════════════════
+// RENDER SENT
+// ════════════════════════════════════════════
+function renderSent() {
+  const q=(document.getElementById('searchSent').value||'').trim();
+  const ct=document.getElementById('sentContent');
+  ct.innerHTML='';
+  const dupSet=new Set(); getCombinedMap().forEach(p=>dupSet.add(p.name+'||'+p.phone));
+
+  // 발송완료 날짜별 그룹핑
+  const byDate = {};
+  getCurrentData().forEach(sec=>{
+    sec.winners.forEach(w=>{
+      if (!isSent(sec.category,w.name,w.phone)) return;
+      const info = getPackedInfo(sec.category,w.name,w.phone);
+      const d = info.sentDate||'미상';
+      if(!byDate[d]) byDate[d]=[];
+      byDate[d].push({w, cat:sec.category});
+    });
+  });
+
+  const dates = Object.keys(byDate).sort();
+  let hasAny = dates.length>0;
+
+  dates.forEach(date=>{
+    let items = byDate[date];
+    if(q) items=items.filter(({w,cat})=>w.name.includes(q)||w.phone.includes(q)||w.addr.includes(q)||cat.includes(q));
+    if(!items.length) return;
+
+    // 날짜 헤더
+    const dateHeader = document.createElement('div');
+    dateHeader.innerHTML = `<div style="display:flex;align-items:center;gap:10px;padding:6px 0 10px;margin-bottom:4px;border-bottom:1px solid #1e4a6a">
+      <span style="font-size:14px;font-weight:700;color:#5eb8f0">🚚 발송완료 · ${fmtDate(date)||date}</span>
+      <span style="font-family:'DM Mono',monospace;font-size:11px;background:#0d1e2e;border:1px solid #1e4a6a;color:#5eb8f0;border-radius:20px;padding:1px 8px">${items.length}명</span>
+    </div>`;
+    ct.appendChild(dateHeader);
+
+    // 날짜 안에서 카테고리별 그룹핑
+    const byCat = {};
+    items.forEach(({w,cat}) => {
+      if(!byCat[cat]) byCat[cat]=[];
+      byCat[cat].push(w);
+    });
+
+    Object.entries(byCat).forEach(([cat, winners]) => {
+      const sec_el = document.createElement('div');
+      sec_el.className = 'section';
+      sec_el.style.marginBottom = '16px';
+      sec_el.innerHTML = `<div class="section-header" style="margin-bottom:8px">
+        <div class="section-title" style="font-size:12px;color:var(--muted)">${cat}</div>
+        <span class="section-count" style="color:#5eb8f0;border-color:#1e4a6a;background:#0d1e2e">${winners.length}명</span>
+      </div><div class="winners-grid"></div>`;
+      ct.appendChild(sec_el);
+      const grid = sec_el.querySelector('.winners-grid');
+      winners.forEach(w => {
+        const c = buildCard(w, cat, {isDup:dupSet.has(w.name+'||'+w.phone)});
+        c.classList.add('card-entering');
+        grid.appendChild(c);
+      });
+    });
+  });
+
+  document.getElementById('noResSent').classList.toggle('hidden', hasAny);
+}
+
+// ════════════════════════════════════════════
+// RENDER ALL
+// ════════════════════════════════════════════
+function renderAll() {
+  const q=(document.getElementById('searchAll').value||'').trim();
+  const ct=document.getElementById('allContent');
+  ct.innerHTML='';
+
+  // filter buttons — rebuild each render to reflect pack/ship state
+  const fb=document.getElementById('filterRow');
+  // remove old category btns (keep 전체 + packedToggle)
+  Array.from(fb.querySelectorAll('.filter-btn:not(.filter-all)')).forEach(b=>b.remove());
+  getCurrentData().forEach((sec,i)=>{
+    const btn=document.createElement('button');
+    const allDone = sec.winners.every(w=>isPacked(sec.category,w.name,w.phone));
+    const shipped  = isCatShipped(sec.category);
+    btn.className='filter-btn' + (allDone?' all-packed':'') + (shipped?' cat-shipped':'');
+    btn.textContent=sec.category.replace(/^\[.*?\]\s*/,'').substring(0,12);
+    if(currentFilter===i) btn.classList.add('active');
+    btn.onclick=()=>setFilter(i,btn);
+    fb.insertBefore(btn, document.getElementById('packedToggle'));
+  });
+
+  const dupSet=new Set(); getCombinedMap().forEach(p=>dupSet.add(p.name+'||'+p.phone));
+  let hasAny=false;
+
+  getCurrentData().forEach((sec,si)=>{
+    if(currentFilter!=='all' && currentFilter!=si) return;
+    let list=sec.winners.filter(w=>!q||w.name.includes(q)||w.phone.includes(q)||w.addr.includes(q));
+    if(hidePackedInAll) list=list.filter(w=>!isPacked(sec.category,w.name,w.phone));
+    if(!list.length) return;
+    hasAny=true;
+    const sec_el = buildSection(sec, list.length+'명');
+    ct.appendChild(sec_el);
+    const grid=sec_el.querySelector('.winners-grid');
+    list.forEach(w=>{
+      const c = buildCard(w,sec.category,{isDup:dupSet.has(w.name+'||'+w.phone)});
+      c.classList.add('card-entering');
+      grid.appendChild(c);
+    });
+  });
+  document.getElementById('noResAll').classList.toggle('hidden',hasAny);
+}
+
+function setFilter(val,btn){
+  currentFilter=val;
+  document.querySelectorAll('.filter-btn').forEach(b=>b.classList.remove('active'));
+  btn.classList.add('active');
+  renderAll();
+}
+function toggleHidePacked(){
+  hidePackedInAll=!hidePackedInAll;
+  const btn=document.getElementById('packedToggle');
+  btn.classList.toggle('on',hidePackedInAll);
+  btn.textContent=hidePackedInAll?'포장완료 보이기':'포장완료 숨기기';
+  renderAll();
+}
+
+// ════════════════════════════════════════════
+// COPY
+// ════════════════════════════════════════════
+function copySingle(name,phone,addr,btn){
+  navigator.clipboard.writeText(`${name}\n${phone}\n${addr}`).then(()=>{
+    const orig=btn.textContent; btn.textContent='✓'; btn.classList.add('copied');
+    setTimeout(()=>{btn.textContent=orig;btn.classList.remove('copied');},2000);
+  });
+}
+function copyPerson(btn){
+  const {name,phone,addr}=btn.dataset;
+  const items=JSON.parse(btn.dataset.items.replace(/&#39;/g,"'"));
+  const text=`[합배송]\n이름: ${name}\n연락처: ${phone}\n주소: ${addr}\n수령 경품:\n${items.map((it,i)=>`  ${i+1}. ${it}`).join('\n')}`;
+  navigator.clipboard.writeText(text).then(()=>{
+    btn.textContent='✓ 복사됨'; btn.classList.add('copied');
+    setTimeout(()=>{btn.textContent='📋 전체 복사';btn.classList.remove('copied');},2000);
+  });
+}
+
+
+// ════════════════════════════════════════════
+// PAGE SWITCHING
+// ════════════════════════════════════════════
+let currentPage = 'delivery';
+let stockReady = false; // Firebase stock 데이터 로드 완료 여부
+
+function switchPage(page) {
+  currentPage = page;
+  document.getElementById('deliveryPage').style.display = page==='delivery' ? 'block' : 'none';
+  document.getElementById('stockPage').style.display    = page==='stock'    ? 'block' : 'none';
+  document.getElementById('pageTabDelivery').classList.toggle('active', page==='delivery');
+  document.getElementById('pageTabStock').classList.toggle('active', page==='stock');
+  if (page==='stock' && stockReady) renderStock();
+}
+
+// ════════════════════════════════════════════
+// STOCK DATA (Firebase: stock_items)
+// ════════════════════════════════════════════
+let stockItems = {}; // id → {id, name, qty, note}
+
+const INITIAL_STOCK = [
+  {name:"포칼 Alpha 50 Evo 스피커 1조",qty:1,note:"콘테스트로 사용 예정"},
+  {name:"로보락 Qrevo EdgeC",qty:1,note:"콘테스트로 사용 예정"},
+  {name:"윈세프 무소음 냉장고",qty:2,note:"콘테스트로 사용 예정"},
+  {name:"에디파이어 QR30 화이트",qty:1,note:"개봉"},
+  {name:"에디파이어 ES850NB 헤드폰",qty:4,note:"개봉"},
+  {name:"에디파이어 QS20 블루투스 스피커",qty:2,note:""},
+  {name:"에디파이어 QS20 블루투스 스피커 (개봉)",qty:1,note:"개봉"},
+  {name:"에디파이어 QD25 블루투스 스피커 (화이트)",qty:1,note:"개봉"},
+  {name:"팬톤 보조배터리 PBP 100",qty:2,note:"개봉"},
+  {name:"팬톤 보조배터리 PGB 20",qty:3,note:"개봉"},
+  {name:"팬톤 보조배터리 PTPB09",qty:2,note:"개봉"},
+  {name:"팬톤 이어폰 PTB30",qty:1,note:"개봉"},
+  {name:"필립스 위즈 스마트 LED 전구 풀컬러",qty:60,note:""},
+  {name:"필립스 휴 브릿지",qty:1,note:""},
+  {name:"비믹스 오클락 세라믹 긴 탁상시계",qty:20,note:""},
+  {name:"탱그램라이팅 이더 로즈골드",qty:1,note:""},
+  {name:"탱그램라이팅 에이와 오렌지",qty:1,note:"개봉"},
+  {name:"탱그램라이팅 에이와",qty:3,note:""},
+  {name:"그라바스타 머큐리 X PRO 블랙",qty:2,note:""},
+  {name:"그라바스타 머큐리 X PRO 실버",qty:1,note:"개봉"},
+  {name:"그라바스타 머큐리 K1 PRO CGRY",qty:1,note:""},
+  {name:"그라바스타 머큐리 K1 사쿠라핑크",qty:1,note:""},
+  {name:"그라바스타 머큐리 X PRO 옐로우",qty:2,note:""},
+  {name:"그라바스타 머큐리 M1 PRO 건메탈",qty:2,note:"개봉"},
+  {name:"그라바스타 머큐리 M1 PRO 실버",qty:2,note:"개봉"},
+  {name:"그라바스타 P9 PLUS",qty:2,note:""},
+  {name:"이매이션 i9 2TB 그린",qty:1,note:"개봉"},
+  {name:"이매이션 헤드셋 거치대",qty:1,note:"개봉"},
+  {name:"8BITDO Retro R8 MOUSE",qty:1,note:""},
+  {name:"이매이션 보조배터리 IMPB200",qty:2,note:""},
+  {name:"캐리핏 블랙",qty:2,note:""},
+  {name:"필립스 유선 헤드폰 SHP9000",qty:1,note:"개봉"},
+  {name:"볼케이노 이어폰 (블랙)",qty:1,note:"개봉"},
+  {name:"30센트 전자디퓨저",qty:2,note:""},
+  {name:"니즈 스톤디퓨저",qty:1,note:""},
+  {name:"원오프 알루미늄 트레이 블랙",qty:2,note:""},
+  {name:"원오프 듀얼 모니터 받침대 화이트",qty:1,note:""},
+  {name:"디올트 디퓨저 머스크",qty:12,note:""},
+  {name:"디올트 디퓨저 히노키",qty:4,note:""},
+  {name:"아이리버 스톰 아이스팬 터보",qty:2,note:"개봉"},
+  {name:"맥키 CR4.5WHT 스피커",qty:23,note:""},
+  {name:"아이리버 스톰 터보 탁상용 선풍기",qty:1,note:"개봉"},
+  {name:"덱스탑 퓨어 프리즈 탁상용 미니 선풍기",qty:2,note:""},
+  {name:"RK S98 키보드",qty:2,note:"개봉"},
+  {name:"어메이즈핏 BIP 6",qty:1,note:""},
+  {name:"필립스 TAZ5000 클래식 올인원 블루투스 CD, 라디오",qty:1,note:"개봉 추가 보유"},
+  {name:"필립스 가정용 라디오 알람 시계 TAR4500",qty:1,note:""},
+  {name:"필립스 라디오 감성 TAR2509 FM AM",qty:1,note:"개봉 추가 보유"},
+  {name:"필립스 휴대용 미니 라디오 TAR1509 재난 FM AM",qty:1,note:"개봉 추가 보유"},
+  {name:"미이 시계 옐로우",qty:1,note:"개봉"},
+  {name:"미이 시계",qty:2,note:""},
+  {name:"아틀리에 레불 디퓨저",qty:7,note:"개봉"},
+  {name:"아틀리에 레불 캔들",qty:3,note:"개봉"},
+  {name:"우딕 메모오거나이저",qty:1,note:"개봉"},
+  {name:"우딕 펜트레이",qty:1,note:"개봉"},
+  {name:"일리안 데스크 스탠드 메이플 대형",qty:1,note:""},
+  {name:"일리안 데스크 스탠드 블랙 대형",qty:1,note:""},
+  {name:"SECRID 키드지갑",qty:0,note:""},
+  {name:"오비키 네스트 블랙",qty:1,note:"개봉"},
+  {name:"오비키 네스트 그레이",qty:1,note:"개봉"},
+  {name:"오비키 네스트 V2 그레이",qty:0,note:""},
+  {name:"오비키 랩탑 슬리브 14 블랙",qty:1,note:""},
+  {name:"오비키 랩탑 슬리브 14 테라코타",qty:1,note:""},
+  {name:"오비키 랩탑 슬리브 14 곤마리",qty:1,note:""},
+  {name:"오비키 랩탑 슬리브 16 곤마리",qty:1,note:""},
+  {name:"오비키 랩탑 슬리브 16 스타워즈 에디션",qty:1,note:""},
+  {name:"오비키 랩탑 슬리브 14 스타워즈 에디션",qty:1,note:""},
+  {name:"오비키 펜슬케이스",qty:2,note:""},
+  {name:"오비키 테크파우치 (스톤, 라일락)",qty:2,note:""},
+  {name:"오비키 데스크파우치",qty:2,note:""},
+  {name:"오비키 컨팬디움 A4",qty:1,note:""},
+  {name:"오비키 데스크매트 슬림",qty:2,note:""},
+  {name:"오비키 데스크매트 라지",qty:2,note:""},
+  {name:"후후루",qty:10,note:"개봉"},
+  {name:"피아톤 900 레거시+",qty:1,note:"개봉"},
+  {name:"키노히 3종 기프트세트",qty:1,note:""},
+  {name:"브레스밋 멀티탭 스탠드 블랙",qty:0,note:""},
+  {name:"브레스밋 멀티탭 스탠드 그레이",qty:1,note:""},
+  {name:"브레스밋 멀티탭 스탠드 티크",qty:1,note:""},
+  {name:"피부피부 천연탈취제",qty:5,note:""},
+  {name:"앤커 맥고 4IN1 무선충전기",qty:1,note:"개봉"},
+  {name:"앤커 사운드코어 Q45",qty:2,note:"개봉"},
+  {name:"앤커 사운드코어 X600",qty:2,note:""},
+  {name:"앤커 사운드코어 리버티 4NC",qty:1,note:"개봉"},
+  {name:"앤커 사운드코어 2",qty:1,note:""},
+  {name:"앤커 도킹스테이션 13in1 썬더볼트3",qty:1,note:"개봉"},
+  {name:"앤커 사운드코어 리버티5",qty:1,note:"개봉"},
+  {name:"앤커 랩탑 파워뱅크 25000mAh 165W 보조배터리",qty:2,note:"개봉"},
+  {name:"앤커 에어로핏 2",qty:1,note:""},
+  {name:"오인페 saturn2",qty:1,note:"개봉"},
+  {name:"VARO 키보드 V87",qty:2,note:""},
+  {name:"미홀 T7SMAX 스마트 휴지통",qty:0,note:""},
+  {name:"펠로우즈 라이징 고중량 프리미엄 싱글 모니터암",qty:3,note:""},
+  {name:"펠로우즈 라이징 고중량 프리미엄 듀얼 모니터암",qty:4,note:""},
+  {name:"펠로우즈 플렉스 모듈러 1FM 싱글 모니터암",qty:1,note:""},
+];
+
+let stockFilter = 'all';   // all | opened | unopened | zero
+let stockSort   = 'default'; // default | qty_desc | qty_asc
+
+function setStockFilter(val, btn) {
+  stockFilter = val;
+  document.querySelectorAll('.stock-filter-chip').forEach(b=>b.classList.remove('active'));
+  btn.classList.add('active');
+  renderStock();
+}
+
+function setStockSort(val, btn) {
+  // 같은 버튼 다시 누르면 등록순으로
+  if (stockSort === val) {
+    stockSort = 'default';
+    document.querySelectorAll('.stock-sort-chip').forEach(b=>b.classList.remove('active'));
+    document.getElementById('sortDefault').style.display = 'none';
+  } else {
+    stockSort = val;
+    document.querySelectorAll('.stock-sort-chip').forEach(b=>b.classList.remove('active'));
+    btn.classList.add('active');
+    document.getElementById('sortDefault').style.display = '';
+  }
+  renderStock();
+}
+
+function initStockFromFirebase() {
+  db.ref('stock_items').once('value', snap => {
+    const val = snap.val();
+    if (!val || Object.keys(val).length === 0) {
+      // 최초 1회 초기 데이터 업로드
+      const batch = {};
+      INITIAL_STOCK.forEach((item, i) => {
+        const id = 'item_' + Date.now() + '_' + i;
+        batch[id] = {id, name:item.name, qty:item.qty, note:item.note, order:i};
+      });
+      db.ref('stock_items').set(batch);
+    }
+  });
+
+  db.ref('stock_items').on('value', snap => {
+    stockItems = {};
+    const raw = snap.val() || {};
+    Object.values(raw).forEach(item => { if(item && item.id) stockItems[item.id] = item; });
+    stockReady = true;
+    if (currentPage === 'stock') renderStock();
+  });
+}
+
+function renderStock() {
+  const q = (document.getElementById('stockSearch').value||'').trim().toLowerCase();
+  const tbody = document.getElementById('stockTableBody');
+  tbody.innerHTML = '';
+
+  let items = Object.values(stockItems).sort((a,b)=>(a.order||0)-(b.order||0));
+  if (q) items = items.filter(it => it.name.toLowerCase().includes(q) || (it.note||'').toLowerCase().includes(q));
+
+  // 개봉/미개봉/재고없음 필터
+  if (stockFilter === 'opened')   items = items.filter(it => (it.note||'').includes('개봉'));
+  if (stockFilter === 'unopened') items = items.filter(it => !(it.note||'').includes('개봉'));
+  if (stockFilter === 'zero')     items = items.filter(it => (it.qty||0) === 0);
+
+  // 수량 정렬
+  if (stockSort === 'qty_desc') items.sort((a,b)=>(b.qty||0)-(a.qty||0));
+  if (stockSort === 'qty_asc')  items.sort((a,b)=>(a.qty||0)-(b.qty||0));
+
+  let totalQty=0, zeroCount=0, openedCount=0;
+  items.forEach((item, i) => {
+    totalQty += item.qty||0;
+    if ((item.qty||0) === 0) zeroCount++;
+    if ((item.note||'').includes('개봉')) openedCount++;
+  });
+  document.getElementById('stockTotal').textContent   = items.length;
+  document.getElementById('stockTotalQty').textContent= totalQty;
+  document.getElementById('stockZero').textContent    = zeroCount;
+  document.getElementById('stockOpened').textContent  = openedCount;
+
+  items.forEach((item, i) => {
+    const isZero = (item.qty||0) === 0;
+    const isOpened = (item.note||'').includes('개봉');
+    const tr = document.createElement('tr');
+    if (isZero) tr.classList.add('zero-stock');
+    tr.dataset.id = item.id;
+    tr.innerHTML = `
+      <td style="color:var(--dim);font-size:11px;font-family:'DM Mono',monospace">${i+1}</td>
+      <td>
+        <div class="stock-name-row">
+          <span class="stock-name-cell">${item.name}</span>
+          <span class="stock-qty-mobile ${isZero?'zero':''}">${item.qty??0}</span>
+        </div>
+      </td>
+      <td><span class="stock-qty ${isZero?'zero':''}">${item.qty??0}</span></td>
+      <td><span class="stock-note ${isOpened?'opened':''}">${item.note||'-'}</span></td>
+      <td class="stock-actions">
+        <button class="stock-btn edit" onclick="openEditStock('${item.id}')">수정</button>
+        <button class="stock-btn del admin-only" onclick="deleteStock('${item.id}','${esc(item.name)}')">삭제</button>
+      </td>
+    `;
+    tbody.appendChild(tr);
+  });
+
+  if (items.length === 0) {
+    tbody.innerHTML = '<tr><td colspan="5" style="text-align:center;color:var(--muted);padding:40px">검색 결과가 없습니다.</td></tr>';
+  }
+}
+
+// ── Stock Modal
+let _stockEditId = null;
+function openAddStockModal() {
+  _stockEditId = null;
+  document.getElementById('stockModalTitle').textContent = '➕ 제품 추가';
+  document.getElementById('stockNameInput').value = '';
+  document.getElementById('stockQtyInput').value  = '';
+  document.getElementById('stockNoteInput').value = '';
+  document.getElementById('stockEditId').value    = '';
+  document.getElementById('stockModalOverlay').classList.add('open');
+  setTimeout(()=>document.getElementById('stockNameInput').focus(), 300);
+}
+function openEditStock(id) {
+  const item = stockItems[id];
+  if (!item) return;
+  _stockEditId = id;
+  document.getElementById('stockModalTitle').textContent = '✏️ 제품 수정';
+  document.getElementById('stockNameInput').value = item.name||'';
+  document.getElementById('stockQtyInput').value  = item.qty??0;
+  document.getElementById('stockNoteInput').value = item.note||'';
+  document.getElementById('stockEditId').value    = id;
+  document.getElementById('stockModalOverlay').classList.add('open');
+  setTimeout(()=>document.getElementById('stockNameInput').focus(), 300);
+}
+function closeStockModal() { document.getElementById('stockModalOverlay').classList.remove('open'); }
+function closeStockModalIfOutside(e) { if(e.target===document.getElementById('stockModalOverlay')) closeStockModal(); }
+
+function saveStock() {
+  const name = document.getElementById('stockNameInput').value.trim();
+  const qty  = parseInt(document.getElementById('stockQtyInput').value)||0;
+  const note = document.getElementById('stockNoteInput').value.trim();
+  if (!name) { document.getElementById('stockNameInput').focus(); return; }
+  const id = _stockEditId || ('item_'+Date.now());
+  const existing = stockItems[id]||{};
+  db.ref('stock_items/'+id).set({id, name, qty, note, order: existing.order??Date.now()});
+  closeStockModal();
+}
+
+function deleteStock(id, name) {
+  if (!confirm(`"${name}" 항목을 삭제할까요?`)) return;
+  db.ref('stock_items/'+id).remove();
+}
+
+// ════════════════════════════════════════════
+// FILE UPLOAD + AI PARSE
+// ════════════════════════════════════════════
+let uploadParsedData = []; // [{category, badge, note, winners:[{name,phone,addr}]}]
+
+function openUploadModal() {
+  uploadParsedData = [];
+  document.getElementById('uploadDropZone').style.display = '';
+  document.getElementById('uploadFileInput').value = '';
+  document.getElementById('uploadParsing').classList.remove('show');
+  document.getElementById('uploadResultWrap').classList.remove('show');
+  document.getElementById('uploadError').classList.remove('show');
+  document.getElementById('uploadInitActions').style.display = '';
+  document.getElementById('uploadModalOverlay').classList.add('open');
+}
+function closeUploadModal() { document.getElementById('uploadModalOverlay').classList.remove('open'); }
+function closeUploadModalIfOutside(e) { if(e.target===document.getElementById('uploadModalOverlay')) closeUploadModal(); }
+
+function onDragOver(e)  { e.preventDefault(); document.getElementById('uploadDropZone').classList.add('drag-over'); }
+function onDragLeave(e) { document.getElementById('uploadDropZone').classList.remove('drag-over'); }
+function onDrop(e) {
+  e.preventDefault();
+  document.getElementById('uploadDropZone').classList.remove('drag-over');
+  const file = e.dataTransfer.files[0];
+  if (file) processFile(file);
+}
+function onFileSelected(e) {
+  const file = e.target.files[0];
+  if (file) processFile(file);
+}
+
+async function processFile(file) {
+  document.getElementById('uploadDropZone').style.display = 'none';
+  document.getElementById('uploadInitActions').style.display = 'none';
+  document.getElementById('uploadParsing').classList.add('show');
+  document.getElementById('uploadResultWrap').classList.remove('show');
+  document.getElementById('uploadError').classList.remove('show');
+
+  try {
+    let text = '';
+    const ext = file.name.split('.').pop().toLowerCase();
+
+    if (ext === 'txt') {
+      text = await file.text();
+    } else if (ext === 'docx' || ext === 'doc') {
+      const arrayBuffer = await file.arrayBuffer();
+      const result = await mammoth.extractRawText({arrayBuffer});
+      text = result.value;
+    } else if (ext === 'xlsx' || ext === 'xls' || ext === 'csv') {
+      const arrayBuffer = await file.arrayBuffer();
+      const wb = XLSX.read(arrayBuffer, {type:'array'});
+      // 모든 시트를 텍스트로 변환
+      const lines = [];
+      wb.SheetNames.forEach(sheetName => {
+        const ws = wb.Sheets[sheetName];
+        const rows = XLSX.utils.sheet_to_json(ws, {header:1, defval:''});
+        if (rows.length > 1) lines.push('[시트: ' + sheetName + ']');
+        rows.forEach(row => {
+          const cells = row.map(c => String(c).trim()).filter(c => c);
+          if (cells.length) lines.push(cells.join('\t'));
+        });
+      });
+      text = lines.join('\n');
+    } else {
+      throw new Error('지원하지 않는 파일 형식입니다. .txt / .docx / .xlsx / .csv 파일을 사용해 주세요.');
+    }
+
+    if (!text.trim()) throw new Error('파일 내용을 읽을 수 없습니다.');
+
+    await parseWithAI(text);
+  } catch(err) {
+    showUploadError(err.message || '파일 처리 중 오류가 발생했습니다.');
+  }
+}
+
+async function parseWithAI(text) {
+  const prompt = `다음은 경품 이벤트 당첨자 명단입니다. 이 텍스트에서 당첨자 정보를 추출해서 JSON으로 반환해 주세요.
+
+규칙:
+- 제품명(카테고리)별로 그룹화
+- 각 당첨자의 이름, 전화번호, 주소를 추출
+- 전화번호는 010-XXXX-XXXX 형식으로 정규화
+- 주소는 최대한 원문 그대로 유지
+- 제품명이 불명확하면 "기타"로 분류
+
+반드시 아래 JSON 형식만 반환 (다른 텍스트 없이):
+[
+  {
+    "category": "제품명",
+    "winners": [
+      {"name": "이름", "phone": "010-0000-0000", "addr": "주소"}
+    ]
+  }
+]
+
+당첨자 명단:
+${text.slice(0, 6000)}`;
+
+  const res = await fetch('https://api.anthropic.com/v1/messages', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      model: 'claude-sonnet-4-20250514',
+      max_tokens: 4000,
+      messages: [{ role: 'user', content: prompt }]
+    })
+  });
+
+  if (!res.ok) throw new Error('AI 분석 실패: ' + res.status);
+  const data = await res.json();
+  const raw = data.content.find(b=>b.type==='text')?.text || '';
+
+  // JSON 추출
+  const jsonMatch = raw.match(/\[[\s\S]*\]/);
+  if (!jsonMatch) throw new Error('AI 응답에서 데이터를 찾을 수 없습니다.');
+
+  const parsed = JSON.parse(jsonMatch[0]);
+  if (!Array.isArray(parsed) || parsed.length === 0) throw new Error('추출된 당첨자가 없습니다.');
+
+  uploadParsedData = parsed.map(sec => ({
+    category: sec.category || '기타',
+    badge: 'badge-purple',
+    note: sec.winners?.length + '명',
+    winners: (sec.winners || []).map(w => ({
+      name:  w.name  || '',
+      phone: w.phone || '',
+      addr:  w.addr  || ''
+    })).filter(w => w.name)
+  })).filter(sec => sec.winners.length > 0);
+
+  showUploadPreview();
+}
+
+function showUploadPreview() {
+  document.getElementById('uploadParsing').classList.remove('show');
+
+  if (uploadParsedData.length === 0) {
+    showUploadError('당첨자 정보를 찾을 수 없습니다. 파일 형식을 확인해 주세요.');
+    return;
+  }
+
+  const totalWinners = uploadParsedData.reduce((s,sec)=>s+sec.winners.length, 0);
+  document.getElementById('uploadResultCount').textContent = totalWinners + '명';
+
+  const list = document.getElementById('uploadPreviewList');
+  list.innerHTML = '';
+  uploadParsedData.forEach(sec => {
+    sec.winners.forEach(w => {
+      const div = document.createElement('div');
+      div.className = 'upload-preview-item';
+      div.innerHTML = `
+        <div class="upload-preview-cat">${sec.category}</div>
+        <div class="upload-preview-winner">👤 ${w.name} &nbsp; 📱 ${w.phone}</div>
+        <div class="upload-preview-addr">📍 ${w.addr}</div>
+      `;
+      list.appendChild(div);
+    });
+  });
+
+  document.getElementById('uploadResultWrap').classList.add('show');
+}
+
+function showUploadError(msg) {
+  document.getElementById('uploadParsing').classList.remove('show');
+  document.getElementById('uploadDropZone').style.display = '';
+  const errEl = document.getElementById('uploadError');
+  errEl.textContent = '⚠️ ' + msg;
+  errEl.classList.add('show');
+  document.getElementById('uploadInitActions').style.display = '';
+}
+
+function confirmUpload() {
+  if (!uploadParsedData.length) return;
+
+  // 현재 이벤트의 data에 추가
+  const ev = getAllEvents().find(e => e.id === currentEventId);
+  if (!ev) return;
+
+  // 기존 카테고리와 병합
+  const existingData = [...(ev.data || [])];
+  uploadParsedData.forEach(newSec => {
+    const existing = existingData.find(s => s.category === newSec.category);
+    if (existing) {
+      existing.winners = [...(existing.winners||[]), ...newSec.winners];
+      existing.note = existing.winners.length + '명';
+    } else {
+      existingData.push(newSec);
+    }
+  });
+
+  // Firebase events에 저장 (builtin 이벤트도 포함)
+  db.ref('events/'+fbKey(currentEventId)).update({ data: existingData });
+
+  // extraEvents 로컬 캐시 즉시 반영
+  if (!extraEvents[currentEventId]) {
+    extraEvents[currentEventId] = { ...ev, data: existingData };
+  } else {
+    extraEvents[currentEventId].data = existingData;
+  }
+
+  closeUploadModal();
+  updateStats();
+  rerenderCurrentTab();
+  renderDateBar();
+
+  // 성공 토스트
+  showToast('✅ ' + uploadParsedData.reduce((s,sec)=>s+sec.winners.length,0) + '명 추가 완료!');
+}
+
+function showToast(msg) {
+  let t = document.getElementById('toastEl');
+  if (!t) {
+    t = document.createElement('div');
+    t.id = 'toastEl';
+    t.style.cssText = 'position:fixed;bottom:calc(24px + var(--safe-bottom));left:50%;transform:translateX(-50%);background:#1a1a22;border:1px solid var(--ok-border);color:var(--ok);padding:10px 20px;border-radius:20px;font-size:13px;z-index:500;transition:opacity 0.3s;white-space:nowrap;';
+    document.body.appendChild(t);
+  }
+  t.textContent = msg;
+  t.style.opacity = '1';
+  clearTimeout(t._timer);
+  t._timer = setTimeout(()=>{ t.style.opacity='0'; }, 2800);
+}
+
+// ════════════════════════════════════════════
+// LOGIN SYSTEM
+// ════════════════════════════════════════════
+// 비밀번호 Firebase에 저장 (초기값 하드코딩, 변경 가능)
+const DEFAULT_PW = { guest: 'futureterior2025', admin: 'future@admin2025' };
+let passwords = { guest: DEFAULT_PW.guest, admin: DEFAULT_PW.admin };
+let currentRole = null; // null | 'guest' | 'admin'
+let loginType = 'guest';
+
+function selectLoginTab(type) {
+  loginType = type;
+  document.getElementById('loginTabGuest').classList.toggle('active', type==='guest');
+  document.getElementById('loginTabAdmin').classList.toggle('active', type==='admin');
+  document.getElementById('loginPwInput').value = '';
+  document.getElementById('loginError').textContent = '';
+}
+
+function doLogin() {
+  const pw = document.getElementById('loginPwInput').value;
+  const err = document.getElementById('loginError');
+  if (!pw) { err.textContent = '비밀번호를 입력해 주세요.'; return; }
+  if (pw !== passwords[loginType]) { err.textContent = '비밀번호가 틀렸습니다.'; return; }
+
+  currentRole = loginType;
+  document.getElementById('loginScreen').style.display = 'none';
+  document.getElementById('loadingScreen').style.display = 'flex';
+  setRoleUI(currentRole);
+  renderDateBar();
+  initFirebase();
+  initStockFromFirebase();
+}
+
+function setRoleUI(role) {
+  const badge = document.getElementById('roleBadge');
+  if (role === 'admin') {
+    badge.className = 'role-badge admin';
+    badge.textContent = '🔑 관리자';
+    document.body.classList.add('admin-mode');
+  } else {
+    badge.className = 'role-badge guest';
+    badge.textContent = '👤 게스트';
+    document.body.classList.remove('admin-mode');
+  }
+}
+
+function logout() {
+  currentRole = null;
+  document.body.classList.remove('admin-mode');
+  document.getElementById('loginPwInput').value = '';
+  document.getElementById('loginError').textContent = '';
+  selectLoginTab('guest');
+  document.getElementById('loginScreen').style.display = 'flex';
+}
+
+// ── 비밀번호 변경
+let pwChangeTarget = null; // 'guest' | 'admin'
+
+function openPwModal() {
+  if (!currentRole) return;
+  pwChangeTarget = currentRole;
+  document.getElementById('pwModalDesc').textContent =
+    `현재 ${currentRole === 'admin' ? '관리자' : '게스트'} 비밀번호를 변경합니다.`;
+  document.getElementById('pwCurrentInput').value = '';
+  document.getElementById('pwNewInput').value = '';
+  document.getElementById('pwConfirmInput').value = '';
+  document.getElementById('pwError').textContent = '';
+  document.getElementById('pwModalOverlay').classList.add('open');
+}
+function closePwModal() { document.getElementById('pwModalOverlay').classList.remove('open'); }
+function closePwModalIfOutside(e) { if(e.target===document.getElementById('pwModalOverlay')) closePwModal(); }
+
+function changePassword() {
+  const cur    = document.getElementById('pwCurrentInput').value;
+  const newPw  = document.getElementById('pwNewInput').value;
+  const confirm= document.getElementById('pwConfirmInput').value;
+  const errEl  = document.getElementById('pwError');
+
+  if (cur !== passwords[pwChangeTarget]) { errEl.textContent = '현재 비밀번호가 틀렸습니다.'; return; }
+  if (newPw.length < 6) { errEl.textContent = '새 비밀번호는 6자 이상이어야 합니다.'; return; }
+  if (newPw !== confirm) { errEl.textContent = '새 비밀번호가 일치하지 않습니다.'; return; }
+
+  passwords[pwChangeTarget] = newPw;
+  // Firebase에 암호화 없이 저장 (간단 운영용)
+  db.ref('app_passwords/' + pwChangeTarget).set(newPw);
+  closePwModal();
+  showToast('✅ 비밀번호가 변경되었습니다.');
+}
+
+// ── 당첨자 명단 삭제 (관리자 전용)
+function deleteCategoryWinners(cat) {
+  if (currentRole !== 'admin') return;
+  if (!confirm(`"${cat}" 카테고리의 당첨자 명단을 삭제할까요?\n포장/발송 데이터도 함께 삭제됩니다.`)) return;
+
+  const ev = getAllEvents().find(e => e.id === currentEventId);
+  if (!ev) return;
+
+  const newData = (ev.data||[]).filter(sec => sec.category !== cat);
+  db.ref('events/'+fbKey(currentEventId)).update({ data: newData });
+  if (extraEvents[currentEventId]) extraEvents[currentEventId].data = newData;
+
+  // 해당 카테고리 packed_v3 데이터 삭제
+  db.ref('packed_v3').once('value', snap => {
+    const raw = snap.val()||{};
+    Object.entries(raw).forEach(([fk, entry]) => {
+      if (entry && entry.key && entry.key.includes('||'+cat+'||')) {
+        db.ref('packed_v3/'+fk).remove();
+      }
+    });
+  });
+
+  showToast(`🗑 "${cat}" 명단 삭제 완료`);
+  updateStats();
+  rerenderCurrentTab();
+  renderDateBar();
+}
+
+// ── Firebase에서 비밀번호 로드
+function loadPasswords() {
+  db.ref('app_passwords').once('value', snap => {
+    const val = snap.val()||{};
+    if (val.guest) passwords.guest = val.guest;
+    if (val.admin) passwords.admin = val.admin;
+  });
+}
+
+// ════════════════════════════════════════════
+// INIT
+// ════════════════════════════════════════════
+// 비밀번호 먼저 로드 (Firebase 초기화는 로그인 후)
+firebase.initializeApp({
+  apiKey:"AIzaSyDlRL6r7a_DkKpbNHglXOrgJ7cQqnRngMM",
+  authDomain:"event-abcff.firebaseapp.com",
+  databaseURL:"https://event-abcff-default-rtdb.firebaseio.com",
+  projectId:"event-abcff",
+  storageBucket:"event-abcff.firebasestorage.app",
+  messagingSenderId:"450632960444",
+  appId:"1:450632960444:web:d63172727cffd0dcdfc3b9"
+});
+// db는 이미 위에서 firebase.database()로 선언됨
+// 비밀번호 로드
+db.ref('app_passwords').once('value', snap => {
+  const val = snap.val()||{};
+  if (val.guest) passwords.guest = val.guest;
+  if (val.admin) passwords.admin = val.admin;
+});
+// 로그인 화면 표시, 로딩 숨김
+document.getElementById('loadingScreen').style.display = 'none';
+</script>
+</body>
+</html>
