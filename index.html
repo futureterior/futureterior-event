@@ -2520,20 +2520,80 @@ function buildAddressKeywords(originalAddr) {
   return [...new Set(keywords.filter(Boolean))];
 }
 
+function normalizeJusoResponse(json) {
+  if (typeof json === 'string') {
+    try { json = JSON.parse(json); } catch (e) { throw new Error('주소 API 응답 파싱 실패'); }
+  }
+  const common = json && json.results && json.results.common ? json.results.common : {};
+  const errorCode = String(common.errorCode || '0');
+  const errorMessage = common.errorMessage || '';
+  if (errorCode !== '0') throw new Error(errorMessage || ('주소 API 오류: ' + errorCode));
+  return (json && json.results && Array.isArray(json.results.juso)) ? json.results.juso : [];
+}
+
+function fetchJusoCandidatesByJsonp(keyword) {
+  return new Promise((resolve, reject) => {
+    const callbackName = '__jusoCallback_' + Date.now() + '_' + Math.random().toString(36).slice(2);
+    const script = document.createElement('script');
+    const timer = setTimeout(() => {
+      cleanup();
+      reject(new Error('주소 API 응답 시간 초과'));
+    }, 8000);
+
+    function cleanup() {
+      clearTimeout(timer);
+      try { delete window[callbackName]; } catch (e) { window[callbackName] = undefined; }
+      if (script && script.parentNode) script.parentNode.removeChild(script);
+    }
+
+    window[callbackName] = function(data) {
+      try {
+        const list = normalizeJusoResponse(data);
+        cleanup();
+        resolve(list);
+      } catch (err) {
+        cleanup();
+        reject(err);
+      }
+    };
+
+    script.onerror = function() {
+      cleanup();
+      reject(new Error('주소 API 스크립트 로드 실패'));
+    };
+
+    // 브라우저에서 fetch는 CORS로 막힐 수 있어 JSONP 엔드포인트를 우선 사용합니다.
+    script.src = 'https://business.juso.go.kr/addrlink/addrLinkApiJsonp.do'
+      + '?confmKey=' + encodeURIComponent(JUSO_CONFM_KEY.trim())
+      + '&currentPage=1'
+      + '&countPerPage=5'
+      + '&keyword=' + encodeURIComponent(keyword)
+      + '&resultType=json'
+      + '&callback=' + encodeURIComponent(callbackName);
+    document.head.appendChild(script);
+  });
+}
+
 async function fetchJusoCandidates(keyword) {
-  const url = 'https://business.juso.go.kr/addrlink/addrLinkApi.do'
-    + '?confmKey=' + encodeURIComponent(JUSO_CONFM_KEY.trim())
-    + '&currentPage=1'
-    + '&countPerPage=5'
-    + '&keyword=' + encodeURIComponent(keyword)
-    + '&resultType=json';
-  const res = await fetch(url);
-  if (!res.ok) throw new Error('주소 API 연결 실패');
-  const json = await res.json();
-  const errorCode = json?.results?.common?.errorCode;
-  const errorMessage = json?.results?.common?.errorMessage;
-  if (errorCode && errorCode !== '0') throw new Error(errorMessage || '주소 API 오류');
-  return json?.results?.juso || [];
+  try {
+    return await fetchJusoCandidatesByJsonp(keyword);
+  } catch (jsonpErr) {
+    // 일부 환경에서는 JSONP 엔드포인트가 막힐 수 있어 fetch를 보조 시도합니다.
+    const url = 'https://business.juso.go.kr/addrlink/addrLinkApi.do'
+      + '?confmKey=' + encodeURIComponent(JUSO_CONFM_KEY.trim())
+      + '&currentPage=1'
+      + '&countPerPage=5'
+      + '&keyword=' + encodeURIComponent(keyword)
+      + '&resultType=json';
+    try {
+      const res = await fetch(url);
+      if (!res.ok) throw new Error('주소 API 연결 실패');
+      const json = await res.json();
+      return normalizeJusoResponse(json);
+    } catch (fetchErr) {
+      throw new Error((jsonpErr && jsonpErr.message ? jsonpErr.message : 'JSONP 실패') + ' / ' + (fetchErr && fetchErr.message ? fetchErr.message : 'fetch 실패'));
+    }
+  }
 }
 
 function jusoToAddressData(juso) {
