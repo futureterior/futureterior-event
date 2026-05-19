@@ -592,46 +592,108 @@ body{
 
 /* ── LOGIN ── */
 .login-screen{
-  position:fixed;inset:0;background:var(--bg);z-index:600;
-  display:flex;flex-direction:column;align-items:center;justify-content:center;
-  padding:20px;
+  position:fixed; inset:0; z-index:600;
+  display:flex; align-items:center; justify-content:center;
+  padding:20px; overflow:hidden;
+  background:
+    radial-gradient(circle at 20% 20%, rgba(124,106,247,0.16), transparent 34%),
+    radial-gradient(circle at 82% 18%, rgba(94,240,192,0.12), transparent 28%),
+    radial-gradient(circle at 50% 100%, rgba(124,106,247,0.10), transparent 36%),
+    linear-gradient(180deg, #0b0c12 0%, #0f1018 48%, #11131d 100%);
 }
+.login-screen::before,
+.login-screen::after{
+  content:''; position:absolute; border-radius:50%; filter:blur(55px); pointer-events:none;
+}
+.login-screen::before{
+  width:240px; height:240px; left:-70px; top:-50px; background:rgba(124,106,247,0.20);
+}
+.login-screen::after{
+  width:260px; height:260px; right:-90px; bottom:-70px; background:rgba(94,240,192,0.10);
+}
+.login-shell{ width:100%; max-width:430px; position:relative; z-index:1; }
 .login-box{
-  background:var(--surface);border:1px solid var(--border);
-  border-radius:16px;padding:32px 28px;width:100%;max-width:360px;
+  position:relative; overflow:hidden;
+  background:linear-gradient(180deg, rgba(26,26,34,0.92) 0%, rgba(17,19,28,0.96) 100%);
+  border:1px solid rgba(255,255,255,0.08);
+  border-radius:28px; padding:34px 28px 26px; width:100%;
+  box-shadow:0 26px 80px rgba(0,0,0,0.42), inset 0 1px 0 rgba(255,255,255,0.05);
+  backdrop-filter:blur(18px);
 }
-.login-logo{ font-size:28px; text-align:center; margin-bottom:6px; }
-.login-title{ font-size:16px;font-weight:700;text-align:center;margin-bottom:4px; }
-.login-subtitle{ font-size:12px;color:var(--muted);text-align:center;margin-bottom:24px; }
-.login-tabs{
-  display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-bottom:20px;
+.login-box::before{
+  content:''; position:absolute; inset:0;
+  background:linear-gradient(135deg, rgba(124,106,247,0.12), transparent 36%, transparent 64%, rgba(94,240,192,0.08));
+  pointer-events:none;
 }
-.login-tab-btn{
-  padding:8px;border-radius:8px;border:1px solid var(--border);
-  background:var(--surface2);color:var(--muted);font-size:13px;
-  cursor:pointer;font-family:'Noto Sans KR',sans-serif;transition:all 0.2s;
-  pointer-events:all !important; position:relative; z-index:10;
+.login-brand-ring{
+  width:72px; height:72px; margin:0 auto 14px; border-radius:22px;
+  display:flex; align-items:center; justify-content:center;
+  background:linear-gradient(180deg, rgba(124,106,247,0.18), rgba(124,106,247,0.08));
+  border:1px solid rgba(124,106,247,0.28);
+  box-shadow:0 14px 34px rgba(124,106,247,0.18);
 }
-.login-tab-btn.active{background:var(--accent);border-color:var(--accent);color:#fff;font-weight:700;}
-.login-tab-btn:hover:not(.active){border-color:var(--muted);color:var(--text);}
+.login-logo{ font-size:34px; line-height:1; }
+.login-title{ font-size:24px; font-weight:800; text-align:center; margin-bottom:8px; letter-spacing:-0.03em; }
+.login-subtitle{ font-size:13px; color:#9a9bb3; text-align:center; margin-bottom:20px; line-height:1.6; }
+.login-meta-row{ display:flex; gap:8px; justify-content:center; flex-wrap:wrap; margin-bottom:24px; }
+.login-chip{
+  display:inline-flex; align-items:center; gap:6px;
+  padding:7px 10px; border-radius:999px;
+  background:rgba(255,255,255,0.04); border:1px solid rgba(255,255,255,0.06);
+  color:#b5b7c9; font-size:11px; line-height:1;
+}
+.login-form{ position:relative; z-index:1; }
+.login-field{ margin-bottom:14px; }
+.login-label{
+  display:block; font-size:11px; font-weight:700; letter-spacing:0.04em;
+  color:#8f91aa; margin-bottom:8px;
+}
+.login-select-wrap{ position:relative; }
+.login-select-wrap::after{
+  content:'⌄'; position:absolute; right:16px; top:50%; transform:translateY(-50%);
+  color:#8789a6; font-size:15px; pointer-events:none;
+}
+.login-select,
 .login-input{
-  width:100%;background:var(--surface2);border:1px solid var(--border);
-  border-radius:10px;padding:12px 14px;color:var(--text);font-size:14px;
-  font-family:'Noto Sans KR',sans-serif;outline:none;margin-bottom:12px;
-  transition:border-color 0.2s;
+  width:100%; appearance:none; -webkit-appearance:none;
+  background:rgba(255,255,255,0.04); border:1px solid rgba(255,255,255,0.08);
+  border-radius:16px; padding:14px 16px; color:var(--text); font-size:14px;
+  font-family:'Noto Sans KR',sans-serif; outline:none;
+  transition:border-color 0.2s, box-shadow 0.2s, transform 0.18s, background 0.2s;
+  box-shadow:inset 0 1px 0 rgba(255,255,255,0.03);
 }
-.login-input:focus{border-color:var(--accent);}
-.login-input::placeholder{color:var(--dim);}
+.login-select{ padding-right:42px; cursor:pointer; }
+.login-select:focus,
+.login-input:focus{
+  border-color:rgba(124,106,247,0.7);
+  box-shadow:0 0 0 4px rgba(124,106,247,0.14);
+  background:rgba(255,255,255,0.05);
+}
+.login-input::placeholder{ color:#666a84; }
 .login-btn{
-  width:100%;padding:12px;border-radius:10px;border:none;
-  background:var(--accent);color:#fff;font-size:14px;font-weight:700;
-  cursor:pointer;font-family:'Noto Sans KR',sans-serif;margin-top:4px;
-  transition:opacity 0.2s;
+  width:100%; padding:15px 16px; border-radius:16px; border:none;
+  background:linear-gradient(135deg, #7c6af7 0%, #8d7df8 45%, #6b5ae8 100%);
+  color:#fff; font-size:15px; font-weight:800; letter-spacing:-0.01em;
+  cursor:pointer; font-family:'Noto Sans KR',sans-serif; margin-top:8px;
+  box-shadow:0 14px 26px rgba(124,106,247,0.28);
+  transition:transform 0.18s, box-shadow 0.18s, filter 0.18s;
 }
-.login-btn:active{opacity:0.85;}
+.login-btn:hover{ transform:translateY(-1px); box-shadow:0 18px 34px rgba(124,106,247,0.34); }
+.login-btn:active{ transform:translateY(0); filter:brightness(0.97); }
 .login-error{
-  font-size:12px;color:var(--danger);text-align:center;
-  margin-top:10px;min-height:18px;
+  font-size:12px; color:#ff8f8f; text-align:center;
+  margin-top:12px; min-height:18px;
+}
+.login-footnote{
+  margin-top:16px; text-align:center; font-size:11px; color:#6f738e; line-height:1.6;
+}
+@media(max-width:480px){
+  .login-box{ padding:28px 20px 22px; border-radius:24px; }
+  .login-brand-ring{ width:64px; height:64px; margin-bottom:12px; }
+  .login-logo{ font-size:30px; }
+  .login-title{ font-size:21px; }
+  .login-subtitle{ margin-bottom:18px; }
+  .login-meta-row{ margin-bottom:20px; }
 }
 /* 관리자 전용 요소 */
 .admin-only{ display:none; }
@@ -745,21 +807,38 @@ body{
 
 <!-- Login Screen -->
 <div class="login-screen" id="loginScreen">
-  <div class="login-box">
-    <div class="login-logo">🎁</div>
-    <div class="login-title">퓨처테리어 경품 관리</div>
-    <div class="login-subtitle">접속 유형을 선택하고 비밀번호를 입력해 주세요</div>
-    <select id="loginTypeSelect" onchange="loginType=this.value" style="
-      width:100%;background:var(--surface2);border:1px solid var(--border);
-      border-radius:10px;padding:12px 14px;color:var(--text);font-size:14px;
-      font-family:'Noto Sans KR',sans-serif;outline:none;margin-bottom:12px;
-      cursor:pointer;appearance:auto;">
-      <option value="guest" style="background:#1a1a22">👤 게스트</option>
-      <option value="admin" style="background:#1a1a22">🔑 관리자</option>
-    </select>
-    <input class="login-input" type="password" id="loginPwInput" placeholder="비밀번호 입력" onkeydown="if(event.key==='Enter')doLogin()">
-    <button class="login-btn" onclick="doLogin()">접속</button>
-    <div class="login-error" id="loginError"></div>
+  <div class="login-shell">
+    <div class="login-box">
+      <div class="login-brand-ring"><div class="login-logo">🎁</div></div>
+      <div class="login-title">퓨처테리어 경품 관리</div>
+      <div class="login-subtitle">이벤트 경품 배송과 재고를 한 번에 관리할 수 있는<br>내부 운영 전용 관리자 페이지입니다.</div>
+
+      <div class="login-meta-row">
+        <span class="login-chip">🔒 내부 전용</span>
+        <span class="login-chip">📦 배송 / 재고 통합 관리</span>
+      </div>
+
+      <div class="login-form">
+        <div class="login-field">
+          <label class="login-label" for="loginTypeSelect">접속 유형</label>
+          <div class="login-select-wrap">
+            <select class="login-select" id="loginTypeSelect" onchange="loginType=this.value">
+              <option value="guest">👤 게스트</option>
+              <option value="admin">🔑 관리자</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="login-field">
+          <label class="login-label" for="loginPwInput">비밀번호</label>
+          <input class="login-input" type="password" id="loginPwInput" placeholder="비밀번호를 입력해 주세요" onkeydown="if(event.key==='Enter')doLogin()">
+        </div>
+
+        <button class="login-btn" onclick="doLogin()">접속하기</button>
+        <div class="login-error" id="loginError"></div>
+        <div class="login-footnote">권한에 따라 접근 가능한 메뉴가 다르게 표시됩니다.</div>
+      </div>
+    </div>
   </div>
 </div>
 
