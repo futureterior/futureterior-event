@@ -289,6 +289,22 @@ body{
 
 .copy-btn.verify-btn{min-width:58px;color:var(--warn);}
 .copy-btn.verify-btn.verified{color:var(--ok);font-weight:700;}
+.verify-action-row{
+  border-top:1px solid var(--border);
+  display:flex;align-items:center;justify-content:flex-end;
+  padding:8px 10px;background:rgba(247,192,106,0.035);
+}
+.verify-action-row .copy-btn.verify-btn{
+  border:1px solid rgba(247,192,106,0.45);border-radius:8px;
+  min-height:30px;padding:0 12px;color:var(--warn);
+  background:#1e1608;font-weight:700;
+}
+.verify-action-row .copy-btn.verify-btn:hover{border-color:var(--warn);background:#2e1e0d;}
+.sent-verified-line{
+  display:inline-flex;align-items:center;gap:5px;margin-top:6px;
+  font-size:10px;color:#5eb8f0;background:#0d1e2e;border:1px solid #1e4a6a;
+  border-radius:999px;padding:2px 8px;
+}
 .addr-verified-line{
   display:inline-flex;align-items:center;gap:5px;margin-top:6px;
   font-size:10px;color:var(--ok);background:var(--ok-bg);border:1px solid var(--ok-border);
@@ -801,7 +817,7 @@ body{
 .log-time{font-family:'DM Mono',monospace;color:var(--dim);font-size:10px;margin-bottom:4px}
 .log-action{font-weight:700;color:var(--accent2);margin-bottom:3px}
 .log-detail{color:var(--muted);line-height:1.5}
-.copy-btn-group{display:flex;flex-direction:column;border-left:1px solid var(--border)}
+.copy-btn-group{display:grid;grid-template-rows:1fr 1fr;border-left:1px solid var(--border);min-width:58px}
 .copy-btn-group .copy-btn{border-bottom:1px solid var(--border);min-height:34px;padding:0 10px;white-space:nowrap}
 .copy-btn-group .copy-btn:last-child{border-bottom:none}
 .stock-badges{display:flex;gap:5px;flex-wrap:wrap;margin-top:6px}
@@ -811,7 +827,7 @@ body{
 @media(max-width:640px){
   .ops-toolbar{overflow-x:auto;flex-wrap:nowrap;scrollbar-width:none;padding-bottom:10px}.ops-toolbar::-webkit-scrollbar{display:none}.ops-btn{flex-shrink:0}
   .stats-row{grid-template-columns:repeat(2,1fr)}
-  .card-footer{display:grid;grid-template-columns:1fr auto}.copy-btn-group{min-width:76px}.copy-btn-group .copy-btn{font-size:11px;min-height:38px}
+  .card-footer{display:grid;grid-template-columns:1fr auto}.copy-btn-group{min-width:66px}.copy-btn-group .copy-btn{font-size:11px;min-height:38px}.verify-action-row{justify-content:center}.verify-action-row .copy-btn.verify-btn{width:100%;justify-content:center}
   .privacy-notice{padding:8px 16px}
 }
 
@@ -2055,9 +2071,11 @@ function buildCard(w, cat, opts={}) {
   else if (isDup) tag = `<span class="card-tag tag-dup">합배송</span>`;
 
   const verifiedAddr = getVerifiedAddress(cat, w.name, w.phone);
-  const verifyLine = verifiedAddr && verifiedAddr.verified
-    ? `<div class="addr-verified-line">✓ 주소검증 완료 · ${htmlEsc(verifiedAddr.zip || '')}</div>`
-    : (done ? `<div class="addr-unverified-line">⚠ 주소검증 필요</div>` : '');
+  const verifyLine = sent
+    ? `<div class="sent-verified-line">✓ 주소검증 완료 · 발송완료 처리됨</div>`
+    : (verifiedAddr && verifiedAddr.verified
+      ? `<div class="addr-verified-line">✓ 주소검증 완료 · ${htmlEsc(verifiedAddr.zip || '')}</div>`
+      : (done ? `<div class="addr-unverified-line">⚠ 주소검증 필요</div>` : ''));
 
   // footer
   let footer = '';
@@ -2087,9 +2105,9 @@ function buildCard(w, cat, opts={}) {
       <div class="copy-btn-group">
         <button class="copy-btn" onclick="copySingle('${esc(w.name)}','${esc(w.phone)}','${esc(w.addr)}',this)">주소</button>
         <button class="copy-btn" onclick="copyShipping('${esc(w.name)}','${esc(w.phone)}','${esc(w.addr)}','${esc(cat)}',this)">택배</button>
-        <button class="copy-btn verify-btn ${verifiedAddr && verifiedAddr.verified ? 'verified' : ''}" onclick="verifyWinnerAddress('${esc(cat)}','${esc(w.name)}','${esc(w.phone)}','${esc(w.addr)}')">${verifiedAddr && verifiedAddr.verified ? '검증✓' : '자동검증'}</button>
       </div>
-    </div>`;
+    </div>
+    ${done && !sent && !(verifiedAddr && verifiedAddr.verified) ? `<div class="verify-action-row"><button class="copy-btn verify-btn" onclick="verifyWinnerAddress('${esc(cat)}','${esc(w.name)}','${esc(w.phone)}','${esc(w.addr)}')">주소 자동검증</button></div>` : ''}`;
   }
 
   div.innerHTML = `
@@ -2999,7 +3017,7 @@ function downloadPostOfficePackedExcel(includeUnverified=false) {
   const unverified = items.filter(item => !item.verified || !item.verified.verified);
   if (unverified.length && !includeUnverified) {
     const preview = unverified.slice(0, 8).map(item => `- ${item.name} / ${item.phone}`).join('\n');
-    alert(`주소검증이 필요한 항목이 ${unverified.length}건 있습니다.\n\n${preview}${unverified.length > 8 ? '\n...' : ''}\n\n각 카드의 [자동검증] 버튼으로 주소검증 후 다시 다운로드해주세요.`);
+    alert(`주소검증이 필요한 항목이 ${unverified.length}건 있습니다.\n\n${preview}${unverified.length > 8 ? '\n...' : ''}\n\n각 카드의 [주소 자동검증] 버튼으로 주소검증 후 다시 다운로드해주세요.`);
     showToast(`⚠️ 주소 미검증 ${unverified.length}건`);
     return;
   }
