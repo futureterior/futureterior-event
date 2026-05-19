@@ -982,10 +982,32 @@ body{
 
 <script>
 // ════════════════════════════════════════════
-// FIREBASE
+// GLOBAL VARIABLES (모든 전역변수 최상단 선언)
 // ════════════════════════════════════════════
-// Firebase already initialized above
-const db = firebase.database();
+var db; // Firebase DB — INIT에서 할당
+
+// 로그인
+var DEFAULT_PW = { guest: '8282', admin: '8569' };
+var passwords   = { guest: '8282', admin: '8569' };
+var currentRole = null;
+var loginType   = 'guest';
+
+// 앱 상태
+var packed       = {};
+var shippedCats  = {};
+var extraEvents  = {};
+var currentEventId;
+var currentTab   = 'combined';
+var currentFilter= 'all';
+var hidePackedInAll = false;
+var filterBuilt  = false;
+var stockItems   = {};
+var stockFilter  = 'all';
+var stockSort    = 'default';
+var stockReady   = false;
+var currentPage  = 'delivery';
+var uploadParsedData = [];
+var pwChangeTarget = null;
 
 // ════════════════════════════════════════════
 // DATA — 날짜별 그룹
@@ -1198,20 +1220,22 @@ const EVENTS = [
     ]
   }
 ];
+// currentEventId 초기값
+currentEventId = EVENTS[0].id;
 
 // Firebase에서 추가 날짜 이벤트도 관리
-let extraEvents = {}; // id → {id, date, label, data:[]}
+
 
 // ════════════════════════════════════════════
 // STATE
 // ════════════════════════════════════════════
-let packed = {};        // { key: {packed, packDate, packTime, sent, sentDate, sentTime} }
-let currentEventId = EVENTS[0].id;
-let currentTab = 'combined';
-let currentFilter = 'all';
-let hidePackedInAll = false;
-let shippedCats = {}; // key: eventId||cat → true
-let filterBuilt = false;
+
+
+
+
+
+
+
 
 // ════════════════════════════════════════════
 // HELPERS
@@ -2004,7 +2028,7 @@ function copyPerson(btn){
 // ════════════════════════════════════════════
 // PAGE SWITCHING
 // ════════════════════════════════════════════
-let currentPage = 'delivery';
+
 let stockReady = false; // Firebase stock 데이터 로드 완료 여부
 
 function switchPage(page) {
@@ -2019,7 +2043,7 @@ function switchPage(page) {
 // ════════════════════════════════════════════
 // STOCK DATA (Firebase: stock_items)
 // ════════════════════════════════════════════
-let stockItems = {}; // id → {id, name, qty, note}
+
 
 const INITIAL_STOCK = [
   {name:"포칼 Alpha 50 Evo 스피커 1조",qty:1,note:"콘테스트로 사용 예정"},
@@ -2119,8 +2143,8 @@ const INITIAL_STOCK = [
   {name:"펠로우즈 플렉스 모듈러 1FM 싱글 모니터암",qty:1,note:""},
 ];
 
-let stockFilter = 'all';   // all | opened | unopened | zero
-let stockSort   = 'default'; // default | qty_desc | qty_asc
+
+
 
 function setStockFilter(val, btn) {
   stockFilter = val;
@@ -2270,7 +2294,7 @@ function deleteStock(id, name) {
 // ════════════════════════════════════════════
 // FILE UPLOAD + AI PARSE
 // ════════════════════════════════════════════
-let uploadParsedData = []; // [{category, badge, note, winners:[{name,phone,addr}]}]
+
 
 function openUploadModal() {
   uploadParsedData = [];
@@ -2494,10 +2518,7 @@ function showToast(msg) {
 // LOGIN SYSTEM
 // ════════════════════════════════════════════
 // 비밀번호 Firebase에 저장 (초기값 하드코딩, 변경 가능)
-const DEFAULT_PW = { guest: '8282', admin: '8569' };
-let passwords = { guest: DEFAULT_PW.guest, admin: DEFAULT_PW.admin };
-let currentRole = null; // null | 'guest' | 'admin'
-let loginType = 'guest';
+// (전역변수는 최상단에 선언됨)
 
 function selectLoginTab(type) {
   loginType = type;
@@ -2553,7 +2574,7 @@ function logout() {
 }
 
 // ── 비밀번호 변경
-let pwChangeTarget = null; // 'guest' | 'admin'
+
 
 function openPwModal() {
   if (!currentRole) return;
@@ -2626,7 +2647,6 @@ function loadPasswords() {
 // ════════════════════════════════════════════
 // INIT
 // ════════════════════════════════════════════
-// 비밀번호 먼저 로드 (Firebase 초기화는 로그인 후)
 firebase.initializeApp({
   apiKey:"AIzaSyDlRL6r7a_DkKpbNHglXOrgJ7cQqnRngMM",
   authDomain:"event-abcff.firebaseapp.com",
@@ -2636,15 +2656,15 @@ firebase.initializeApp({
   messagingSenderId:"450632960444",
   appId:"1:450632960444:web:d63172727cffd0dcdfc3b9"
 });
-// 비밀번호 Firebase에서 로드
+db = firebase.database(); // 전역 var db에 할당
+
+// 비밀번호 Firebase에서 로드 (저장된 값 있으면 덮어씀)
 db.ref('app_passwords').once('value', snap => {
   const val = snap.val()||{};
   if (val.guest) passwords.guest = val.guest;
   if (val.admin) passwords.admin = val.admin;
-  console.log('비밀번호 로드 완료');
 });
-// 로그인 화면 표시 (loadingScreen은 기본 숨김)
+// loadingScreen은 기본 숨김 상태
 </script>
 </body>
 </html>
-
