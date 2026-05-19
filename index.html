@@ -18,6 +18,7 @@
   --radius:12px; --safe-bottom: env(safe-area-inset-bottom, 0px);
 }
 *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent;}
+.hidden{display:none!important;}
 html{scroll-behavior:smooth;}
 body{
   background:var(--bg); color:var(--text);
@@ -1008,6 +1009,11 @@ var stockReady   = false;
 var currentPage  = 'delivery';
 var uploadParsedData = [];
 var pwChangeTarget = null;
+var deletedEvents = {};
+var firebaseInitialized = false;
+var stockFirebaseInitialized = false;
+var passwordsLoaded = false;
+var passwordLoadError = null;
 
 // ════════════════════════════════════════════
 // DATA — 날짜별 그룹
@@ -1245,17 +1251,30 @@ function getCurrentData() {
   return ev ? ev.data : [];
 }
 function getAllEvents() {
-  const builtinIds = new Set(EVENTS.map(e=>e.id));
-  // builtin은 EVENTS 데이터(당첨자 포함) 사용, extraEvents에서 제거된 builtin은 제외
-  const deletedBuiltins = new Set(
-    EVENTS.filter(e => !Object.values(extraEvents).find(ex=>ex.id===e.id)).map(e=>e.id)
+  const builtinIds = new Set(EVENTS.map(e => e.id));
+  const remoteMap = new Map(
+    Object.values(extraEvents || {})
+      .filter(ev => ev && ev.id)
+      .map(ev => [ev.id, ev])
   );
-  // extraEvents에 builtin id가 없으면 Firebase에서 삭제된 것
-  const active = [
-    ...EVENTS.filter(e => Object.values(extraEvents).some(ex=>ex.id===e.id)),
-    ...Object.values(extraEvents).filter(ev=>!builtinIds.has(ev.id))
-  ];
-  return active.sort((a,b)=>a.date.localeCompare(b.date));
+
+  const builtins = EVENTS
+    .filter(base => !deletedEvents[base.id])
+    .map(base => {
+      const remote = remoteMap.get(base.id);
+      if (!remote) return base;
+      return {
+        ...base,
+        ...remote,
+        data: remote._hasRemoteData ? (Array.isArray(remote.data) ? remote.data : []) : base.data
+      };
+    });
+
+  const extras = Object.values(extraEvents || {})
+    .filter(ev => ev && ev.id && !builtinIds.has(ev.id) && !deletedEvents[ev.id])
+    .map(ev => ({ ...ev, data: Array.isArray(ev.data) ? ev.data : [] }));
+
+  return [...builtins, ...extras].sort((a,b) => String(a.date || '').localeCompare(String(b.date || '')));
 }
 function packKey(eventId, cat, name, phone) { return `${eventId}||${cat}||${name}||${phone}`; }
 function fbKey(k) { return btoa(unescape(encodeURIComponent(k))).replace(/[.#$[\]]/g,'_').replace(/\//g,'-'); }
@@ -1263,7 +1282,7 @@ function isPacked(cat, name, phone) { return !!packed[packKey(currentEventId, ca
 function isSent(cat, name, phone)   { return !!packed[packKey(currentEventId, cat, name, phone)]?.sent; }
 function getPackedInfo(cat, name, phone) { return packed[packKey(currentEventId, cat, name, phone)] || {}; }
 function nowTime() { const n=new Date(); return String(n.getHours()).padStart(2,'0')+':'+String(n.getMinutes()).padStart(2,'0'); }
-function nowDate() { return new Date().toISOString().slice(0,10); }
+function nowDate() { const n=new Date(); const kst=new Date(n.getTime()+9*60*60*1000); return kst.toISOString().slice(0,10); }
 function fmtDate(d) { return d ? d.slice(5).replace('-','.') : ''; } // "MM.DD"
 
 
@@ -1349,31 +1368,83 @@ function toggleSent(cat, name, phone) {
 
 function initFirebase() {
   const dot = document.getElementById('syncDot');
-  dot.className = 'sync-dot syncing';
+  if (dot) dot.className = 'sync-dot syncing';
 
-  // Sync all events (including hardcoded ones) to Firebase on first load
-  db.ref('events').once('value', snap => {
-    const val = snap.val()||{};
+  if (firebaseInitialized) {
+    updateStats();
+    rerenderCurrentTab();
+    const loading = document.getElementById('loadingScreen');
+    if (loading) loading.style.display = 'none';
+    if (dot) dot.className = 'sync-dot online';
+    return;
+  }
+  firebaseInitialized = true;
+
+  // 삭제된 기본 이벤트 목록을 먼저 읽은 뒤, 기본 이벤트를 Firebase에 시드합니다.
+  Promise.all([
+    db.ref('events').once('value'),
+    db.ref('deleted_events').once('value')
+  ]).then(([eventsSnap, deletedSnap]) => {
+    const existing = eventsSnap.val() || {};
+    deletedEvents = deletedSnap.val() || {};
+
     EVENTS.forEach(ev => {
-      if (!val[fbKey(ev.id)]) {
-        db.ref('events/'+fbKey(ev.id)).set({id:ev.id, date:ev.date, label:ev.label, _builtin:true});
+      if (deletedEvents[ev.id]) return;
+      if (!existing[fbKey(ev.id)]) {
+        db.ref('events/' + fbKey(ev.id)).set({
+          id: ev.id,
+          date: ev.date,
+          label: ev.label,
+          _builtin: true
+        });
       }
     });
+  }).catch(err => {
+    console.error('이벤트 초기화 실패:', err);
+    showToast('⚠️ 이벤트 초기화 실패');
   });
 
-  // Extra events from Firebase
+  // 삭제된 이벤트 동기화
+  db.ref('deleted_events').on('value', snap => {
+    deletedEvents = snap.val() || {};
+    const events = getAllEvents();
+    if (!events.find(e => e.id === currentEventId)) {
+      currentEventId = events[0]?.id || EVENTS[0]?.id;
+    }
+    renderDateBar();
+    updateStats();
+    rerenderCurrentTab();
+  });
+
+  // 이벤트 목록 동기화
   db.ref('events').on('value', snap => {
     extraEvents = {};
-    const val = snap.val()||{};
-    Object.values(val).forEach(ev => { if(ev && ev.id) extraEvents[ev.id] = {...ev, data: ev.data||[]}; });
+    const val = snap.val() || {};
+    Object.values(val).forEach(ev => {
+      if (!ev || !ev.id) return;
+      const hasRemoteData = Object.prototype.hasOwnProperty.call(ev, 'data');
+      extraEvents[ev.id] = {
+        ...ev,
+        data: hasRemoteData && Array.isArray(ev.data) ? ev.data : undefined,
+        _hasRemoteData: hasRemoteData
+      };
+    });
+
+    const events = getAllEvents();
+    if (!events.find(e => e.id === currentEventId)) {
+      currentEventId = events[0]?.id || EVENTS[0]?.id;
+    }
     renderDateBar();
+    updateStats();
+    rerenderCurrentTab();
   });
 
-  // Shipped categories
+  // 카테고리 발송완료 동기화
   db.ref('shipped_cats').on('value', snap => {
     shippedCats = {};
-    const raw = snap.val()||{};
+    const raw = snap.val() || {};
     Object.values(raw).forEach(entry => { if(entry && entry.key) shippedCats[entry.key] = true; });
+    rerenderCurrentTab();
   });
 
   // ── v2 → v3 마이그레이션 (최초 1회만 실행)
@@ -1393,31 +1464,23 @@ function initFirebase() {
       let sentCount = 0, packedCount = 0;
       entries.forEach(entry => {
         const timeStr = entry.time || '00:00';
-        const utcHour = parseInt(timeStr.split(':')[0], 10);
-        const utcMin  = parseInt(timeStr.split(':')[1], 10);
+        const utcHour = parseInt(timeStr.split(':')[0], 10) || 0;
+        const utcMin  = parseInt(timeStr.split(':')[1], 10) || 0;
         const kstTotal = (utcHour * 60 + utcMin + 9 * 60) % (24 * 60);
         const kstHour  = Math.floor(kstTotal / 60);
-        const isSent = kstHour < 13;
+        const isSentEntry = kstHour < 13;
         const fk = fbKey(entry.key);
-        if (isSent) {
-          sentCount++;
-          writes[fk] = {
-            key:      entry.key, packed: true,
-            packDate: '2025-05-20',
-            packTime: String(kstHour).padStart(2,'0')+':'+String(kstTotal%60).padStart(2,'0'),
-            sent:     true,
-            sentDate: '2025-05-20',
-            sentTime: String(kstHour).padStart(2,'0')+':'+String(kstTotal%60).padStart(2,'0')
-          };
-        } else {
-          packedCount++;
-          writes[fk] = {
-            key:      entry.key, packed: true,
-            packDate: '2025-05-20',
-            packTime: String(kstHour).padStart(2,'0')+':'+String(kstTotal%60).padStart(2,'0'),
-            sent: false, sentDate: '', sentTime: ''
-          };
-        }
+        const packTime = String(kstHour).padStart(2,'0')+':'+String(kstTotal%60).padStart(2,'0');
+        writes[fk] = {
+          key: entry.key,
+          packed: true,
+          packDate: '2025-05-20',
+          packTime,
+          sent: isSentEntry,
+          sentDate: isSentEntry ? '2025-05-20' : '',
+          sentTime: isSentEntry ? packTime : ''
+        };
+        if (isSentEntry) sentCount++; else packedCount++;
       });
       console.log('마이그레이션 시작:', entries.length+'건');
       db.ref('packed_v3').remove().then(() => {
@@ -1429,17 +1492,24 @@ function initFirebase() {
     });
   });
 
-  // Packed states
+  // 포장/발송 상태 동기화
   db.ref('packed_v3').on('value', snap => {
     packed = {};
-    const raw = snap.val()||{};
+    const raw = snap.val() || {};
     Object.values(raw).forEach(entry => {
       if (entry && entry.key) packed[entry.key] = entry;
     });
-    dot.className = 'sync-dot online';
-    document.getElementById('loadingScreen').style.display = 'none';
+    if (dot) dot.className = 'sync-dot online';
+    const loading = document.getElementById('loadingScreen');
+    if (loading) loading.style.display = 'none';
     updateStats();
     rerenderCurrentTab();
+  }, err => {
+    console.error('packed_v3 동기화 실패:', err);
+    if (dot) dot.className = 'sync-dot';
+    const loading = document.getElementById('loadingScreen');
+    if (loading) loading.style.display = 'none';
+    showToast('⚠️ Firebase 연결 오류');
   });
 }
 
@@ -1448,7 +1518,6 @@ function initFirebase() {
 // ════════════════════════════════════════════
 function renderDateBar() {
   const bar = document.getElementById('dateBar');
-  const btn = bar.querySelector('.add-date-btn');
   bar.innerHTML = '';
 
   getAllEvents().forEach(ev => {
@@ -1457,26 +1526,30 @@ function renderDateBar() {
     const chip = document.createElement('button');
     chip.className = 'date-chip' + (ev.id===currentEventId ? ' active' : '');
     const dateStr = ev.date.replace(/-/g,'.').slice(2);
-    const delBtn = `<span class="chip-del" title="삭제" onclick="event.stopPropagation();deleteEvent('${ev.id}','${ev.label.replace(/'/g,"\\'")}')">✕</span>`;
-    chip.innerHTML = `${dateStr} <span style="font-size:11px;color:inherit;opacity:0.8">${ev.label}</span> <span class="chip-count">${total}</span>${delBtn}`;
+    const safeId = attrEsc(ev.id);
+    const safeLabel = attrEsc(ev.label || '이벤트');
+    const delBtn = currentRole === 'admin' ? `<span class="chip-del" title="삭제" onclick="event.stopPropagation();deleteEvent('${safeId}','${safeLabel}')">✕</span>` : '';
+    chip.innerHTML = `${dateStr} <span style="font-size:11px;color:inherit;opacity:0.8">${htmlEsc(ev.label || '이벤트')}</span> <span class="chip-count">${total}</span>${delBtn}`;
     chip.onclick = () => selectEvent(ev.id);
     bar.appendChild(chip);
   });
 
-  // ＋ 날짜 추가 버튼
-  const addBtn = document.createElement('button');
-  addBtn.className = 'add-date-btn';
-  addBtn.textContent = '＋ 날짜 추가';
-  addBtn.onclick = openAddDateModal;
-  bar.appendChild(addBtn);
+  if (currentRole === 'admin') {
+    // ＋ 날짜 추가 버튼
+    const addBtn = document.createElement('button');
+    addBtn.className = 'add-date-btn';
+    addBtn.textContent = '＋ 날짜 추가';
+    addBtn.onclick = openAddDateModal;
+    bar.appendChild(addBtn);
 
-  // 📂 파일 업로드 버튼
-  const upBtn = document.createElement('button');
-  upBtn.className = 'add-date-btn';
-  upBtn.style.cssText = 'border-color:var(--accent);color:var(--accent)';
-  upBtn.textContent = '📂 파일 업로드';
-  upBtn.onclick = openUploadModal;
-  bar.appendChild(upBtn);
+    // 📂 파일 업로드 버튼
+    const upBtn = document.createElement('button');
+    upBtn.className = 'add-date-btn';
+    upBtn.style.cssText = 'border-color:var(--accent);color:var(--accent)';
+    upBtn.textContent = '📂 파일 업로드';
+    upBtn.onclick = openUploadModal;
+    bar.appendChild(upBtn);
+  }
 }
 
 function selectEvent(id) {
@@ -1493,7 +1566,8 @@ function selectEvent(id) {
 // ADD DATE MODAL
 // ════════════════════════════════════════════
 function openAddDateModal() {
-  const today = new Date().toISOString().slice(0,10);
+  if (currentRole !== 'admin') { showToast('관리자만 날짜를 추가할 수 있습니다.'); return; }
+  const today = nowDate();
   document.getElementById('dateInput').value = today;
   document.getElementById('dateLabelInput').value = '';
   document.getElementById('modalOverlay').classList.add('open');
@@ -1503,6 +1577,7 @@ function closeModal() { document.getElementById('modalOverlay').classList.remove
 function closeModalIfOutside(e) { if(e.target===document.getElementById('modalOverlay')) closeModal(); }
 
 function addDate() {
+  if (currentRole !== 'admin') { showToast('관리자만 날짜를 추가할 수 있습니다.'); return; }
   const date  = document.getElementById('dateInput').value;
   const label = document.getElementById('dateLabelInput').value.trim() || '이벤트';
   if (!date) return;
@@ -1513,12 +1588,22 @@ function addDate() {
 }
 
 function deleteEvent(id, label) {
-  if (!confirm(`"${label}" 날짜 탭을 삭제할까요?\n\n포장/배송 데이터도 함께 삭제됩니다.`)) return;
+  if (currentRole !== 'admin') { showToast('관리자만 삭제할 수 있습니다.'); return; }
+  if (!confirm(`"${label}" 날짜 탭을 삭제할까요?
+
+포장/배송 데이터도 함께 삭제됩니다.`)) return;
+
+  const isBuiltin = EVENTS.some(ev => ev.id === id);
+  if (isBuiltin) {
+    deletedEvents[id] = true;
+    db.ref('deleted_events/' + id).set(true);
+  }
 
   // Firebase events 삭제
-  db.ref('events/'+fbKey(id)).remove();
+  db.ref('events/' + fbKey(id)).remove();
+  delete extraEvents[id];
 
-  // 해당 이벤트의 packed_v2 항목 삭제
+  // 해당 이벤트의 packed_v3 항목 삭제
   db.ref('packed_v3').once('value', snap => {
     const raw = snap.val() || {};
     Object.entries(raw).forEach(([fk, entry]) => {
@@ -1541,12 +1626,16 @@ function deleteEvent(id, label) {
   // 현재 탭이 삭제된 이벤트면 첫 번째 이벤트로 이동
   if (currentEventId === id) {
     const remaining = getAllEvents().filter(e => e.id !== id);
-    currentEventId = remaining.length ? remaining[0].id : EVENTS[0].id;
+    currentEventId = remaining.length ? remaining[0].id : EVENTS.find(e => !deletedEvents[e.id])?.id || EVENTS[0].id;
     currentFilter = 'all';
-    document.getElementById('filterRow').dataset.built = '';
-    updateStats();
-    rerenderCurrentTab();
+    const filterRow = document.getElementById('filterRow');
+    if (filterRow) filterRow.dataset.built = '';
   }
+
+  renderDateBar();
+  updateStats();
+  rerenderCurrentTab();
+  showToast('🗑 날짜 탭 삭제 완료');
 }
 
 // ════════════════════════════════════════════
@@ -1649,18 +1738,22 @@ function buildCard(w, cat, opts={}) {
   div.innerHTML = `
     <div class="card-body">
       <div class="card-name-row">
-        <div class="winner-name">${w.name}</div>
+        <div class="winner-name">${htmlEsc(w.name)}</div>
         ${tag}
       </div>
-      <div class="winner-phone">${w.phone}</div>
-      <div class="winner-address">${w.addr}</div>
+      <div class="winner-phone">${htmlEsc(w.phone)}</div>
+      <div class="winner-address">${htmlEsc(w.addr)}</div>
     </div>
     ${footer}
   `;
   return div;
 }
 
-function esc(s){ return (s||'').replace(/'/g,"\\'").replace(/"/g,'&quot;'); }
+function htmlEsc(s){ return String(s ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;'); }
+function attrEsc(s){ return htmlEsc(s).replace(/`/g,'&#96;'); }
+function jsEsc(s){ return String(s ?? '').replace(/\/g,'\\').replace(/'/g,"\\'").replace(/"/g,'&quot;').replace(/
+/g,' '); }
+function esc(s){ return jsEsc(s); }
 
 function onCardPack(cb, cid, cat, name, phone) {
   togglePack(cat, name, phone);
@@ -1744,7 +1837,7 @@ function renderCombined() {
       const packCls = done ? 'pack-active' : '';
       const sentCls = sent ? 'sent-active' : '';
       return `<div class="combined-item">
-        <div class="item-cat" style="${sent?'color:#5eb8f0;text-decoration:line-through':done?'color:var(--ok)':''}">${shortCat}</div>
+        <div class="item-cat" style="${sent?'color:#5eb8f0;text-decoration:line-through':done?'color:var(--ok)':''}">${htmlEsc(shortCat)}</div>
         <div class="item-checks">
           <button class="item-check-btn ${packCls}" onclick="onCombinedPack(null,'${esc(cat)}','${esc(p.name)}','${esc(p.phone)}')">
             <span class="btn-dot"></span>포장
@@ -1759,16 +1852,16 @@ function renderCombined() {
     const statusText = allSent ? '🚚 전체 발송완료' : allPacked ? '📦 전체 포장완료' : `📦 ${doneCount}/${p.cats.length} 포장 · 🚚 ${sentCount}/${p.cats.length} 발송`;
     const badgeStyle = allSent ? 'background:#0d1e2e;color:#5eb8f0;border:1px solid #1e4a6a' : allPacked ? 'background:var(--ok-bg);color:var(--ok);border:1px solid var(--ok-border)' : 'background:#2e1e0d;color:var(--warn);border:1px solid var(--warn)';
 
-    const itemsJSON = JSON.stringify(p.items).replace(/'/g,'&#39;');
+    const itemsJSON = attrEsc(JSON.stringify(p.items));
     card.innerHTML = `
       <div class="combined-header">
         <div>
-          <div class="combined-name">${p.name}</div>
-          <div class="combined-phone">${p.phone}</div>
+          <div class="combined-name">${htmlEsc(p.name)}</div>
+          <div class="combined-phone">${htmlEsc(p.phone)}</div>
         </div>
         <span class="combined-badge" style="${badgeStyle}">${p.items.length}개</span>
       </div>
-      <div class="combined-addr">📍 ${p.addr}</div>
+      <div class="combined-addr">📍 ${htmlEsc(p.addr)}</div>
       <div class="combined-items">${itemsHTML}</div>
       <div class="combined-footer">
         <span class="combined-status">${statusText}</span>
@@ -2260,6 +2353,7 @@ function openAddStockModal() {
   setTimeout(()=>document.getElementById('stockNameInput').focus(), 300);
 }
 function openEditStock(id) {
+  if (currentRole !== 'admin') { showToast('관리자만 제품을 수정할 수 있습니다.'); return; }
   const item = stockItems[id];
   if (!item) return;
   _stockEditId = id;
@@ -2286,6 +2380,7 @@ function saveStock() {
 }
 
 function deleteStock(id, name) {
+  if (currentRole !== 'admin') { showToast('관리자만 제품을 삭제할 수 있습니다.'); return; }
   if (!confirm(`"${name}" 항목을 삭제할까요?`)) return;
   db.ref('stock_items/'+id).remove();
 }
@@ -2296,6 +2391,7 @@ function deleteStock(id, name) {
 
 
 function openUploadModal() {
+  if (currentRole !== 'admin') { showToast('관리자만 파일을 업로드할 수 있습니다.'); return; }
   uploadParsedData = [];
   document.getElementById('uploadDropZone').style.display = '';
   document.getElementById('uploadFileInput').value = '';
@@ -2366,61 +2462,124 @@ async function processFile(file) {
 }
 
 async function parseWithAI(text) {
-  const prompt = `다음은 경품 이벤트 당첨자 명단입니다. 이 텍스트에서 당첨자 정보를 추출해서 JSON으로 반환해 주세요.
-
-규칙:
-- 제품명(카테고리)별로 그룹화
-- 각 당첨자의 이름, 전화번호, 주소를 추출
-- 전화번호는 010-XXXX-XXXX 형식으로 정규화
-- 주소는 최대한 원문 그대로 유지
-- 제품명이 불명확하면 "기타"로 분류
-
-반드시 아래 JSON 형식만 반환 (다른 텍스트 없이):
-[
-  {
-    "category": "제품명",
-    "winners": [
-      {"name": "이름", "phone": "010-0000-0000", "addr": "주소"}
-    ]
+  // 외부 AI API를 브라우저에서 직접 호출하면 CORS/API Key 노출 문제가 생기므로
+  // 운영 안정성을 위해 로컬 정규식 파서로 우선 추출합니다.
+  const parsed = parseWinnersLocally(text);
+  if (!Array.isArray(parsed) || parsed.length === 0) {
+    throw new Error('당첨자 정보를 찾을 수 없습니다. 이름/연락처/주소 형식을 확인해 주세요.');
   }
-]
-
-당첨자 명단:
-${text.slice(0, 6000)}`;
-
-  const res = await fetch('https://api.anthropic.com/v1/messages', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      model: 'claude-sonnet-4-20250514',
-      max_tokens: 4000,
-      messages: [{ role: 'user', content: prompt }]
-    })
-  });
-
-  if (!res.ok) throw new Error('AI 분석 실패: ' + res.status);
-  const data = await res.json();
-  const raw = data.content.find(b=>b.type==='text')?.text || '';
-
-  // JSON 추출
-  const jsonMatch = raw.match(/\[[\s\S]*\]/);
-  if (!jsonMatch) throw new Error('AI 응답에서 데이터를 찾을 수 없습니다.');
-
-  const parsed = JSON.parse(jsonMatch[0]);
-  if (!Array.isArray(parsed) || parsed.length === 0) throw new Error('추출된 당첨자가 없습니다.');
 
   uploadParsedData = parsed.map(sec => ({
     category: sec.category || '기타',
     badge: 'badge-purple',
-    note: sec.winners?.length + '명',
+    note: (sec.winners || []).length + '명',
     winners: (sec.winners || []).map(w => ({
-      name:  w.name  || '',
-      phone: w.phone || '',
-      addr:  w.addr  || ''
-    })).filter(w => w.name)
+      name:  String(w.name  || '').trim(),
+      phone: normalizePhone(w.phone || ''),
+      addr:  String(w.addr  || '').trim()
+    })).filter(w => w.name && w.phone)
   })).filter(sec => sec.winners.length > 0);
 
   showUploadPreview();
+}
+
+function normalizePhone(phone) {
+  const digits = String(phone || '').replace(/\D/g, '');
+  if (digits.length === 11 && digits.startsWith('010')) {
+    return digits.replace(/(010)(\d{4})(\d{4})/, '$1-$2-$3');
+  }
+  return String(phone || '').trim();
+}
+
+function cleanLabelValue(line) {
+  return String(line || '')
+    .replace(/^(이름|성함|당첨자|수령인|연락처|전화번호|휴대폰|주소|배송지)\s*[:：=\-]?\s*/i, '')
+    .trim();
+}
+
+function looksLikeCategory(line) {
+  const t = String(line || '').trim();
+  if (!t) return false;
+  if (/^(이름|성함|연락처|전화번호|휴대폰|주소|배송지)\s*[:：=\-]/i.test(t)) return false;
+  if (/010[\s\-.]?\d{3,4}[\s\-.]?\d{4}/.test(t)) return false;
+  if (/(서울|경기|인천|부산|대구|광주|대전|울산|세종|강원|충북|충남|전북|전남|경북|경남|제주|특별시|광역시|시\s|군\s|구\s|읍\s|면\s|동\s|로\s|길\s|아파트|빌라|호\b)/.test(t)) return false;
+  if (t.length > 70) return false;
+  return /[가-힣A-Za-z]/.test(t);
+}
+
+function pushWinner(groups, category, pending) {
+  const name = String(pending.name || '').trim();
+  const phone = normalizePhone(pending.phone || '');
+  const addr = String(pending.addr || '').trim();
+  if (!name || !phone) return;
+  if (!groups[category]) groups[category] = [];
+  groups[category].push({ name, phone, addr });
+  pending.name = '';
+  pending.phone = '';
+  pending.addr = '';
+}
+
+function parseWinnersLocally(text) {
+  const groups = {};
+  let category = '기타';
+  const pending = { name:'', phone:'', addr:'' };
+  const lines = String(text || '')
+    .split(/\r?\n/)
+    .map(l => l.replace(/\t+/g, ' ').replace(/\s+/g, ' ').trim())
+    .filter(Boolean);
+
+  for (const line of lines) {
+    const phoneMatch = line.match(/010[\s\-.]?\d{3,4}[\s\-.]?\d{4}/);
+
+    if (/^(이름|성함|당첨자|수령인)\s*[:：=\-]/i.test(line)) {
+      if (pending.name && pending.phone) pushWinner(groups, category, pending);
+      pending.name = cleanLabelValue(line);
+      continue;
+    }
+
+    if (/^(연락처|전화번호|휴대폰)\s*[:：=\-]/i.test(line)) {
+      pending.phone = cleanLabelValue(line);
+      if (pending.name && pending.phone && pending.addr) pushWinner(groups, category, pending);
+      continue;
+    }
+
+    if (/^(주소|배송지)\s*[:：=\-]/i.test(line)) {
+      pending.addr = cleanLabelValue(line);
+      if (pending.name && pending.phone) pushWinner(groups, category, pending);
+      continue;
+    }
+
+    if (phoneMatch) {
+      const phone = phoneMatch[0];
+      const before = line.slice(0, phoneMatch.index).trim();
+      const after  = line.slice(phoneMatch.index + phone.length).trim();
+      if (before && !pending.name) {
+        pending.name = cleanLabelValue(before).split(/\s+/)[0];
+      }
+      pending.phone = phone;
+      if (after) pending.addr = cleanLabelValue(after);
+      if (pending.name && pending.phone && pending.addr) pushWinner(groups, category, pending);
+      continue;
+    }
+
+    if (pending.name && pending.phone && !pending.addr) {
+      pending.addr = cleanLabelValue(line);
+      pushWinner(groups, category, pending);
+      continue;
+    }
+
+    if (looksLikeCategory(line)) {
+      if (pending.name && pending.phone) pushWinner(groups, category, pending);
+      category = line.replace(/^[-*•\d.\s]+/, '').trim();
+      if (!category) category = '기타';
+    }
+  }
+  if (pending.name && pending.phone) pushWinner(groups, category, pending);
+
+  return Object.entries(groups).map(([cat, winners]) => ({
+    category: cat,
+    winners
+  })).filter(sec => sec.winners.length > 0);
 }
 
 function showUploadPreview() {
@@ -2441,9 +2600,9 @@ function showUploadPreview() {
       const div = document.createElement('div');
       div.className = 'upload-preview-item';
       div.innerHTML = `
-        <div class="upload-preview-cat">${sec.category}</div>
-        <div class="upload-preview-winner">👤 ${w.name} &nbsp; 📱 ${w.phone}</div>
-        <div class="upload-preview-addr">📍 ${w.addr}</div>
+        <div class="upload-preview-cat">${htmlEsc(sec.category)}</div>
+        <div class="upload-preview-winner">👤 ${htmlEsc(w.name)} &nbsp; 📱 ${htmlEsc(w.phone)}</div>
+        <div class="upload-preview-addr">📍 ${htmlEsc(w.addr)}</div>
       `;
       list.appendChild(div);
     });
@@ -2481,7 +2640,7 @@ function confirmUpload() {
   });
 
   // Firebase events에 저장 (builtin 이벤트도 포함)
-  db.ref('events/'+fbKey(currentEventId)).update({ data: existingData });
+  db.ref('events/'+fbKey(currentEventId)).update({ data: existingData, updatedAt: Date.now() });
 
   // extraEvents 로컬 캐시 즉시 반영
   if (!extraEvents[currentEventId]) {
@@ -2529,13 +2688,16 @@ function selectLoginTab(type) {
 function doLogin() {
   const pw = document.getElementById('loginPwInput').value;
   const err = document.getElementById('loginError');
+  if (!passwordsLoaded) { err.textContent = passwordLoadError || '비밀번호를 불러오는 중입니다. 잠시 후 다시 시도해 주세요.'; return; }
   if (!pw) { err.textContent = '비밀번호를 입력해 주세요.'; return; }
   if (pw !== passwords[loginType]) { err.textContent = '비밀번호가 틀렸습니다.'; return; }
 
   currentRole = loginType;
+  currentPage = 'delivery';
   document.getElementById('loginScreen').style.display = 'none';
   document.getElementById('topBar').style.display = 'block';
   document.getElementById('deliveryPage').style.display = 'block';
+  document.getElementById('stockPage').style.display = 'none';
   document.getElementById('loadingScreen').style.display = 'flex';
   setRoleUI(currentRole);
   renderDateBar();
@@ -2600,9 +2762,13 @@ function changePassword() {
 
   passwords[pwChangeTarget] = newPw;
   // Firebase에 암호화 없이 저장 (간단 운영용)
-  db.ref('app_passwords/' + pwChangeTarget).set(newPw);
-  closePwModal();
-  showToast('✅ 비밀번호가 변경되었습니다.');
+  db.ref('app_passwords/' + pwChangeTarget).set(newPw).then(() => {
+    closePwModal();
+    showToast('✅ 비밀번호가 변경되었습니다.');
+  }).catch(err => {
+    console.error('비밀번호 저장 실패:', err);
+    errEl.textContent = '비밀번호 저장에 실패했습니다.';
+  });
 }
 
 // ── 당첨자 명단 삭제 (관리자 전용)
@@ -2635,10 +2801,19 @@ function deleteCategoryWinners(cat) {
 
 // ── Firebase에서 비밀번호 로드
 function loadPasswords() {
-  db.ref('app_passwords').once('value', snap => {
-    const val = snap.val()||{};
+  passwordsLoaded = false;
+  passwordLoadError = null;
+  return db.ref('app_passwords').once('value').then(snap => {
+    const val = snap.val() || {};
     if (val.guest) passwords.guest = val.guest;
     if (val.admin) passwords.admin = val.admin;
+    passwordsLoaded = true;
+    const err = document.getElementById('loginError');
+    if (err) err.textContent = '';
+  }).catch(err => {
+    console.error('비밀번호 로드 실패:', err);
+    passwordsLoaded = true; // Firebase 임시 오류 시 기본 비밀번호로 접속 가능하게 유지
+    passwordLoadError = null;
   });
 }
 
@@ -2657,11 +2832,7 @@ firebase.initializeApp({
 db = firebase.database(); // 전역 var db에 할당
 
 // 비밀번호 Firebase에서 로드 (저장된 값 있으면 덮어씀)
-db.ref('app_passwords').once('value', snap => {
-  const val = snap.val()||{};
-  if (val.guest) passwords.guest = val.guest;
-  if (val.admin) passwords.admin = val.admin;
-});
+loadPasswords();
 // loadingScreen은 기본 숨김 상태
 </script>
 </body>
