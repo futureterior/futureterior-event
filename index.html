@@ -1872,35 +1872,53 @@ function initFirebase() {
   const dot = document.getElementById('syncDot');
   if (dot) dot.className = 'sync-dot syncing';
 
+  const finishLoading = () => {
+    const loading = document.getElementById('loadingScreen');
+    if (loading) loading.style.display = 'none';
+  };
+
+  const renderLocal = () => {
+    const events = getAllEvents();
+    if (!events.find(e => e.id === currentEventId)) currentEventId = events[0]?.id || EVENTS[0]?.id;
+    renderDateBar();
+    updateStats();
+    rerenderCurrentTab();
+  };
+
   if (!db) {
     console.warn('Firebase DB가 없어 로컬 표시 모드로 실행합니다.');
     extraEvents = {};
-    updateStats();
-    rerenderCurrentTab();
-    const loading = document.getElementById('loadingScreen');
-    if (loading) loading.style.display = 'none';
+    renderLocal();
+    finishLoading();
     if (dot) dot.className = 'sync-dot';
     showToast('⚠️ Firebase 연결 없이 로컬 표시 모드로 접속했습니다.');
     return;
   }
 
   if (firebaseInitialized) {
-    updateStats();
-    rerenderCurrentTab();
-    const loading = document.getElementById('loadingScreen');
-    if (loading) loading.style.display = 'none';
+    renderLocal();
+    finishLoading();
     if (dot) dot.className = 'sync-dot online';
     return;
   }
   firebaseInitialized = true;
 
-  // 삭제된 기본 이벤트 목록을 먼저 읽은 뒤, 기본 이벤트를 Firebase에 시드합니다.
+  // 권한이 없는 경로가 있어도 로그인/화면 진입이 멈추지 않도록 안전 조회합니다.
+  const safeOnce = (path, fallback) => {
+    return db.ref(path).once('value')
+      .then(snap => snap.val() || fallback)
+      .catch(err => {
+        console.warn(path + ' 조회 권한 없음 또는 실패:', err && err.message ? err.message : err);
+        return fallback;
+      });
+  };
+
+  // 이벤트/삭제 이벤트 초기화: 실패해도 하드코딩 기본 이벤트로 계속 진행합니다.
   Promise.all([
-    db.ref('events').once('value'),
-    db.ref('deleted_events').once('value')
-  ]).then(([eventsSnap, deletedSnap]) => {
-    const existing = eventsSnap.val() || {};
-    deletedEvents = deletedSnap.val() || {};
+    safeOnce('events', {}),
+    safeOnce('deleted_events', {})
+  ]).then(([existing, deleted]) => {
+    deletedEvents = deleted || {};
 
     EVENTS.forEach(ev => {
       if (deletedEvents[ev.id]) return;
@@ -1910,27 +1928,28 @@ function initFirebase() {
           date: ev.date,
           label: ev.label,
           _builtin: true
+        }).catch(err => {
+          // 내부 Firebase Rules에서 events 쓰기가 막혀도 기본 데이터는 로컬 EVENTS로 표시됩니다.
+          console.warn('기본 이벤트 시드 저장 스킵:', ev.id, err && err.message ? err.message : err);
         });
       }
     });
-  }).catch(err => {
-    console.error('이벤트 초기화 실패:', err);
-    showToast('⚠️ 이벤트 초기화 실패');
+
+    renderLocal();
+    finishLoading();
   });
 
-  // 삭제된 이벤트 동기화
+  // 삭제된 이벤트 동기화 — 권한이 없으면 조용히 기본 이벤트 기준으로 표시합니다.
   db.ref('deleted_events').on('value', snap => {
     deletedEvents = snap.val() || {};
-    const events = getAllEvents();
-    if (!events.find(e => e.id === currentEventId)) {
-      currentEventId = events[0]?.id || EVENTS[0]?.id;
-    }
-    renderDateBar();
-    updateStats();
-    rerenderCurrentTab();
+    renderLocal();
+  }, err => {
+    console.warn('deleted_events 동기화 스킵:', err && err.message ? err.message : err);
+    deletedEvents = {};
+    renderLocal();
   });
 
-  // 이벤트 목록 동기화
+  // 이벤트 목록 동기화 — 권한이 없으면 기본 EVENTS만 사용합니다.
   db.ref('events').on('value', snap => {
     extraEvents = {};
     const val = snap.val() || {};
@@ -1943,14 +1962,11 @@ function initFirebase() {
         _hasRemoteData: hasRemoteData
       };
     });
-
-    const events = getAllEvents();
-    if (!events.find(e => e.id === currentEventId)) {
-      currentEventId = events[0]?.id || EVENTS[0]?.id;
-    }
-    renderDateBar();
-    updateStats();
-    rerenderCurrentTab();
+    renderLocal();
+  }, err => {
+    console.warn('events 동기화 스킵:', err && err.message ? err.message : err);
+    extraEvents = {};
+    renderLocal();
   });
 
   // 카테고리 발송완료 동기화
@@ -1959,20 +1975,23 @@ function initFirebase() {
     const raw = snap.val() || {};
     Object.values(raw).forEach(entry => { if(entry && entry.key) shippedCats[entry.key] = true; });
     rerenderCurrentTab();
+  }, err => {
+    console.warn('shipped_cats 동기화 스킵:', err && err.message ? err.message : err);
+    shippedCats = {};
+    rerenderCurrentTab();
   });
 
-  // ── v2 → v3 마이그레이션 (최초 1회만 실행)
-  db.ref('migration_done').once('value', flagSnap => {
+  // ── v2 → v3 마이그레이션 (권한 없으면 스킵)
+  db.ref('migration_done').once('value').then(flagSnap => {
     if (flagSnap.val() === 'v5') {
       console.log('마이그레이션 이미 완료, 스킵');
       return;
     }
-    db.ref('packed_v2').once('value', v2snap => {
+    return db.ref('packed_v2').once('value').then(v2snap => {
       const raw = v2snap.val() || {};
       const entries = Object.values(raw).filter(e => e && e.key);
       if (!entries.length) {
-        db.ref('migration_done').set('v5');
-        return;
+        return db.ref('migration_done').set('v5').catch(()=>{});
       }
       const writes = {};
       let sentCount = 0, packedCount = 0;
@@ -1997,23 +2016,24 @@ function initFirebase() {
         if (isSentEntry) sentCount++; else packedCount++;
       });
       console.log('마이그레이션 시작:', entries.length+'건');
-      db.ref('packed_v3').remove().then(() => {
-        db.ref('packed_v3').update(writes).then(() => {
-          db.ref('migration_done').set('v5');
-          console.log('✅ 마이그레이션 완료! 발송:', sentCount+'건 / 포장:', packedCount+'건');
-        });
-      });
+      return db.ref('packed_v3').remove()
+        .then(() => db.ref('packed_v3').update(writes))
+        .then(() => db.ref('migration_done').set('v5'))
+        .then(() => console.log('✅ 마이그레이션 완료! 발송:', sentCount+'건 / 포장:', packedCount+'건'));
     });
+  }).catch(err => {
+    console.warn('마이그레이션 스킵:', err && err.message ? err.message : err);
   });
-
 
   // 작업 로그 동기화
   db.ref('activity_logs').limitToLast(100).on('value', snap => {
     activityLogs = snap.val() || {};
     renderLogList();
+  }, err => {
+    console.warn('activity_logs 동기화 스킵:', err && err.message ? err.message : err);
+    activityLogs = {};
+    renderLogList();
   });
-
-  // 주소검증 데이터는 packed_v3 항목 내부의 verifiedAddress에서 동기화합니다.
 
   // 포장/발송 상태 동기화
   db.ref('packed_v3').on('value', snap => {
@@ -2029,16 +2049,14 @@ function initFirebase() {
       }
     });
     if (dot) dot.className = 'sync-dot online';
-    const loading = document.getElementById('loadingScreen');
-    if (loading) loading.style.display = 'none';
+    finishLoading();
     updateStats();
     rerenderCurrentTab();
   }, err => {
     console.error('packed_v3 동기화 실패:', err);
     if (dot) dot.className = 'sync-dot';
-    const loading = document.getElementById('loadingScreen');
-    if (loading) loading.style.display = 'none';
-    showToast('⚠️ Firebase 연결 오류');
+    finishLoading();
+    showToast('⚠️ 포장/발송 데이터 연결 오류');
   });
 }
 
