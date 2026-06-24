@@ -3720,13 +3720,30 @@ function cleanLabelValue(line) {
     .trim();
 }
 
-function looksLikeCategory(line) {
+function cleanCategoryValue(line) {
+  return String(line || '')
+    .replace(/^(제품명|상품명|경품명|제품|상품|경품|품목|카테고리)\s*[:：=\-]?\s*/i, '')
+    .replace(/^[-*•\d.\s]+/, '')
+    .trim();
+}
+
+function looksLikeAddressLine(line) {
   const t = String(line || '').trim();
   if (!t) return false;
-  if (/^(이름|성함|연락처|전화번호|휴대폰|주소|배송지)\s*[:：=\-]/i.test(t)) return false;
+  if (/^\(?\d{5}\)?\s*/.test(t)) return true;
+  if (/^(서울|경기|인천|부산|대구|광주|대전|울산|세종|강원|충북|충남|전북|전남|경북|경남|제주|서울특별시|부산광역시|대구광역시|인천광역시|광주광역시|대전광역시|울산광역시|세종특별자치시|경기도|강원도|충청북도|충청남도|전라북도|전라남도|경상북도|경상남도|제주특별자치도)\b/.test(t)) return true;
+  if (/(\d+(-\d+)?\s*(번지|호|동|층)\b|\d+(-\d+)?\s*(로|길)\b|[가-힣0-9]+(아파트|빌라|오피스텔|주공|타운|맨션|상가|센터|빌딩))/i.test(t)) return true;
+  if (/(시|군|구|읍|면|동)\s+[가-힣0-9-]+/.test(t) && /(로|길|번길|아파트|빌라|호\b|동\b)/.test(t)) return true;
+  return false;
+}
+
+function looksLikeCategory(line) {
+  const t = cleanCategoryValue(line);
+  if (!t) return false;
+  if (/^(이름|성함|당첨자|수령인|연락처|전화번호|휴대폰|주소|배송지)\s*[:：=\-]/i.test(t)) return false;
   if (/010[\s\-.]?\d{3,4}[\s\-.]?\d{4}/.test(t)) return false;
-  if (/(서울|경기|인천|부산|대구|광주|대전|울산|세종|강원|충북|충남|전북|전남|경북|경남|제주|특별시|광역시|시\s|군\s|구\s|읍\s|면\s|동\s|로\s|길\s|아파트|빌라|호\b)/.test(t)) return false;
-  if (t.length > 70) return false;
+  if (looksLikeAddressLine(t)) return false;
+  if (t.length > 100) return false;
   return /[가-힣A-Za-z]/.test(t);
 }
 
@@ -3753,6 +3770,12 @@ function parseWinnersLocally(text) {
 
   for (const line of lines) {
     const phoneMatch = line.match(/010[\s\-.]?\d{3,4}[\s\-.]?\d{4}/);
+
+    if (/^(제품명|상품명|경품명|제품|상품|경품|품목|카테고리)\s*[:：=\-]/i.test(line)) {
+      if (pending.name && pending.phone) pushWinner(groups, category, pending);
+      category = cleanCategoryValue(line) || '기타';
+      continue;
+    }
 
     if (/^(이름|성함|당첨자|수령인)\s*[:：=\-]/i.test(line)) {
       if (pending.name && pending.phone) pushWinner(groups, category, pending);
@@ -3793,8 +3816,7 @@ function parseWinnersLocally(text) {
 
     if (looksLikeCategory(line)) {
       if (pending.name && pending.phone) pushWinner(groups, category, pending);
-      category = line.replace(/^[-*•\d.\s]+/, '').trim();
-      if (!category) category = '기타';
+      category = cleanCategoryValue(line) || '기타';
     }
   }
   if (pending.name && pending.phone) pushWinner(groups, category, pending);
