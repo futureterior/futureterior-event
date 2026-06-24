@@ -1807,6 +1807,14 @@ function getCombinedMap() {
   return Object.values(map).filter(p=>p.items.length>=2);
 }
 
+function isCombinedAllSent(p) {
+  return p.cats.length > 0 && p.cats.every(cat => isSent(cat, p.name, p.phone));
+}
+
+function getActiveCombinedMap() {
+  return getCombinedMap().filter(p => !isCombinedAllSent(p));
+}
+
 function getTotals() {
   let total=0, packedOnly=0, sentCount=0;
   getCurrentData().forEach(sec => sec.winners.forEach(w => {
@@ -2194,7 +2202,7 @@ function deleteEvent(id, label) {
 // ════════════════════════════════════════════
 function updateStats() {
   const {total, packedCount, sentCount, unpacked} = getTotals();
-  const combined = getCombinedMap().length;
+  const combined = getActiveCombinedMap().length;
   const today = nowDate();
   let todayPacked = 0, todaySent = 0;
   Object.values(packed || {}).forEach(info => {
@@ -2395,7 +2403,7 @@ function buildSection(sec, countLabel, countStyle='') {
 // ════════════════════════════════════════════
 function renderCombined() {
   const q  = (document.getElementById('searchCombined').value||'').trim().toLowerCase();
-  const cm = getCombinedMap();
+  const cm = getActiveCombinedMap();
   const filtered = cm.filter(p=>!q||p.name.includes(q)||p.phone.includes(q)||p.addr.toLowerCase().includes(q));
   const grid = document.getElementById('combinedGrid');
   grid.innerHTML='';
@@ -3089,7 +3097,7 @@ function copyShipping(name, phone, addr, cat, btn){
 
 function copyDailySummary(){
   const { total, packedCount, sentCount, unpacked } = getTotals();
-  const combined = getCombinedMap().length;
+  const combined = getActiveCombinedMap().length;
   const today = nowDate();
   let todayPacked = 0;
   let todaySent = 0;
